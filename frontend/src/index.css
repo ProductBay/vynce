@@ -1,0 +1,82 @@
+/* Reset & defaults */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Segoe UI", Roboto, sans-serif;
+  background-color: #0f0f10;
+  color: #eaeaea;
+  height: 100vh;
+}
+
+/* Layout */
+.app-shell {
+  display: flex;
+  height: 100%;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 230px;
+  background: #141416;
+  border-right: 1px solid #242426;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar .logo {
+  color: #24a1de;
+  font-weight: bold;
+  font-size: 1.4rem;
+  padding: 1.2rem;
+}
+
+.sidebar nav a {
+  display: block;
+  padding: 0.8rem 1.2rem;
+  text-decoration: none;
+  color: #b0b0b0;
+  transition: background 0.15s;
+}
+
+.sidebar nav a:hover {
+  background: #242629;
+  color: #fff;
+}
+
+/* Topbar */
+.topbar {
+  height: 60px;
+  background: #1a1b1d;
+  border-bottom: 1px solid #242426;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.4rem;
+}
+
+.topbar h1 {
+  font-size: 1rem;
+  color: #eaeaea;
+  letter-spacing: 0.5px;
+}
+
+/* Main content */
+.main-content {
+  flex: 1;
+  background: #0f0f10;
+  padding: 1.5rem;
+  overflow-y: auto;
+}
+
+/* Example content cards */
+.card {
+  background: #1a1b1d;
+  border-radius: 6px;
+  padding: 1rem;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.35);
+  color: #eaeaea;
+}

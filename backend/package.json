@@ -1,0 +1,27 @@
+{
+  "name": "vynce-backend",
+  "version": "1.0.0",
+  "type": "commonjs",
+  "main": "dialer.js",
+  "scripts": {
+    "start": "node dialer.js"
+  },
+  "dependencies": {
+    "@vonage/server-sdk": "^3.25.1",
+    "body-parser": "^1.20.2",
+    "dotenv": "^17.2.3",
+    "ejs": "^3.1.10",
+    "express": "^4.19.2",
+    "socket.io": "^4.8.1",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2", 
+    "uuid": "^9.0.1"
+  },
+  
+  "devDependencies": {
+    "autoprefixer": "^10.4.22",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.17"
+  }
+}
+

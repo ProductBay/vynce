@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Vynce Dashboard</title>
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+  <h1>📞 Call Dashboard (<%= calls.length %> active calls)</h1>
+  
+  <!-- Single Call -->
+  <form id="singleCallForm">
+    <input type="tel" id="singleNumber" placeholder="Phone number" required>
+    <button type="submit">Make Call</button>
+  </form>
+
+  <!-- CSV Bulk Upload -->
+  <h2>📄 Bulk Upload CSV</h2>
+  <p>CSV format: header "number" (or "phone"), one phone per row.</p>
+  <form id="csvForm" enctype="multipart/form-data">
+    <input type="file" name="file" id="csvFile" accept=".csv" required>
+    <button type="submit">Upload & Dial CSV</button>
+  </form>
+  <div id="progress"></div>
+
+  <!-- Calls Table -->
+  <table border="1">
+    <tr><th>Number</th><th>UUID</th><th>Status</th><th>Time</th><th>Actions</th></tr>
+    <% calls.forEach(call => { %>
+      <tr>
+        <td><%= call.number %></td>
+        <td><%= call.uuid %></td>
+        <td><%= call.status %></td>
+        <td><%= call.createdAt.toLocaleString() %></td>
+        <td><button onclick="endCall('<%= call.uuid %>')">End</button></td>
+      </tr>
+    <% }) %>
+  </table>
+
+  <script>
+    const socket = io();
+    socket.on('callUpdate', (call) => { location.reload(); }); // Simple reload, or update DOM
+    socket.on('bulkStart', (data) => { document.getElementById('progress').innerHTML = `🚀 Starting bulk dial: ${data.count} numbers`; });
+    socket.on('bulkProgress', (data) => { document.getElementById('progress').innerHTML += `<br>✅ ${data.number} (${data.current}/${data.total})`; });
+    socket.on('bulkComplete', (data) => { document.getElementById('progress').innerHTML += `<br>✅ Complete: ${data.success}/${data.total}`; setTimeout(() => location.reload(), 2000); });
+
+    // Single call
+    document.getElementById('singleCallForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const num = document.getElementById('singleNumber').value;
+      await fetch('/api/make-call', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({to: num}) });
+      location.reload();
+    };
+
+    // CSV upload (no reload needed, uses socket progress)
+    document.getElementById('csvForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      await fetch('/api/upload-csv', { method: 'POST', body: formData });
+      document.getElementById('csvFile').value = '';
+    };
+
+    async function endCall(uuid) {
+      await fetch('/api/end-call', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({uuid}) });
+      location.reload();
+    }
+  </script>
+</body>
+</html>

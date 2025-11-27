@@ -1,0 +1,43 @@
+# Environment Variables (MUST BE FIRST!)
+.env
+.env.local
+.env.*.local
+*.env
+
+# Private Keys
+private.key
+*.pem
+*.key
+
+# Dependencies
+node_modules/
+frontend/node_modules/
+backend/node_modules/
+
+# Build Output
+frontend/dist/
+frontend/dist-ssr/
+backend/dist/
+
+# Logs
+*.log
+npm-debug.log*
+logs/
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.sublime-workspace
+
+# Database
+*.sqlite
+*.db
+uploads/
+
+# Local
+*.local
