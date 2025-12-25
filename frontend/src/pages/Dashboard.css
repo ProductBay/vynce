@@ -1,0 +1,185 @@
+.dashboard {
+  padding: 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.dashboard h1 {
+  margin-bottom: 2rem;
+  color: #1f2937;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.stat-card {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  text-align: center;
+}
+
+.stat-card h3 {
+  margin: 0 0 1rem 0;
+  color: #6b7280;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+}
+
+.stat-value {
+  margin: 0;
+  font-size: 3rem;
+  font-weight: 700;
+  color: #667eea;
+}
+
+.stat-card.active .stat-value {
+  color: #10b981;
+}
+
+.call-form-section {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  margin-bottom: 2rem;
+}
+
+.call-form {
+  display: flex;
+  gap: 1rem;
+}
+
+.phone-input {
+  flex: 1;
+  padding: 1rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
+.phone-input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.call-btn {
+  padding: 1rem 2rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.call-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.call-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.calls-section {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.no-calls {
+  text-align: center;
+  color: #9ca3af;
+  padding: 3rem;
+}
+
+.table-container {
+  overflow-x: auto;
+}
+
+.calls-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.calls-table th {
+  text-align: left;
+  padding: 1rem;
+  background: #f9fafb;
+  font-weight: 600;
+  color: #374151;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.calls-table td {
+  padding: 1rem;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.phone-col {
+  font-family: monospace;
+  font-weight: 600;
+}
+
+.uuid-col {
+  font-family: monospace;
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+.status-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.status-badge.initiated,
+.status-badge.dialing {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.status-badge.ringing {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-badge.answered {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.status-badge.completed {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.status-badge.failed {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.end-btn {
+  padding: 0.5rem 1rem;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.end-btn:hover {
+  background: #dc2626;
+}

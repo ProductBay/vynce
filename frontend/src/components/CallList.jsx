@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './CallList.css';
+import API_BASE_URL from '../api';
 
 export default function CallList() {
   const [calls, setCalls] = useState([]);
@@ -8,7 +9,7 @@ export default function CallList() {
   // Fetch calls from API
   const fetchCalls = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/calls');
+     const response = await fetch(`${API_BASE_URL}/api/calls`);
       if (response.ok) {
         const data = await response.json();
         setCalls(data);
@@ -20,6 +21,8 @@ export default function CallList() {
     }
   };
 
+
+  
   // End a specific call
   const endCall = async (callUuid, phoneNumber) => {
     if (!window.confirm(`Are you sure you want to end the call to ${phoneNumber}?`)) {
@@ -28,7 +31,7 @@ export default function CallList() {
 
     setIsLoading(true);
     try {
-      const response = await fetch('http://localhost:3001/api/end-call', {
+      const response = await fetch(`${API_BASE_URL}/api/end-call`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

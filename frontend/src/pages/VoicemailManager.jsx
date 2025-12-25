@@ -8,10 +8,12 @@ export default function VoicemailManager() {  // Make sure this says 'export def
   const [isEnabled, setIsEnabled] = useState(true);
   const [showNewMessageForm, setShowNewMessageForm] = useState(false);
   const [newMessage, setNewMessage] = useState({
-    name: '',
-    content: ''
-  });
+  name: '',
+  content: '',
+  voiceId: 'Amy'  // ← Add this
+});
 
+console.log("Submitting voicemail message:", newMessage);
   useEffect(() => {
     fetchVoicemailMessages();
   }, []);
@@ -29,32 +31,33 @@ export default function VoicemailManager() {  // Make sure this says 'export def
     }
   };
 
-  const handleCreateMessage = async (e) => {
-    e.preventDefault();
-    
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/voicemail-messages`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(newMessage),
-      });
+const handleCreateMessage = async (e) => {
+  e.preventDefault();
+  
+  console.log("Submitting:", newMessage); // 👈 DEBUG
 
-      if (response.ok) {
-        const result = await response.json();
-        setMessages(prev => [...prev, result.voicemailMessage]);
-        setNewMessage({ name: '', content: '' });
-        setShowNewMessageForm(false);
-        alert('Voicemail message created successfully!');
-      } else {
-        throw new Error('Failed to create message');
-      }
-    } catch (error) {
-      console.error('Error creating voicemail message:', error);
-      alert('Error creating voicemail message');
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/voicemail-messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newMessage),
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      setMessages(prev => [...prev, result.message]);
+      setNewMessage({ name: '', content: '', voiceId: 'Amy' });
+      setShowNewMessageForm(false);
+      alert('Voicemail message created successfully!');
+    } else {
+      const error = await response.json();
+      alert(`Error: ${error.message}`);
     }
-  };
+  } catch (error) {
+    console.error('Error creating voicemail message:', error);
+    alert('Network error. Check console.');
+  }
+};
 
   const toggleVoicemail = async () => {
     setIsEnabled(!isEnabled);
@@ -71,6 +74,20 @@ export default function VoicemailManager() {  // Make sure this says 'export def
           </div>
         </div>
         <div className="header-actions">
+           <div className="form-group">
+  <label>Voice</label>
+  <select
+    value={newMessage.voiceId}
+    onChange={(e) => setNewMessage({ ...newMessage, voiceId: e.target.value })}
+    required
+  >
+    <option value="Amy">Amy (US Female)</option>
+    <option value="Emma">Emma (UK Female)</option>
+    <option value="Joey">Joey (US Male)</option>
+    <option value="Salli">Salli (US Female)</option>
+    <option value="Matthew">Matthew (US Male)</option>
+  </select>
+</div>
           <button 
             className={`toggle-btn ${isEnabled ? 'disable' : 'enable'}`}
             onClick={toggleVoicemail}

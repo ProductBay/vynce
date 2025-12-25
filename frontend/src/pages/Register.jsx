@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
+// src/pages/Register.jsx
+import React, { useState } from 'react';
 import { useAuth } from '../components/AuthContext';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import './Auth.css';
 
 export default function Register() {
+  const { register } = useAuth();
+
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -11,46 +14,22 @@ export default function Register() {
     password: '',
     confirmPassword: '',
     company: '',
-    plan: 'starter'
+    plan: 'starter',
   });
+
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [connectionStatus, setConnectionStatus] = useState('checking');
-
-  const { register, testConnection, apiBaseUrl } = useAuth();
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    // Test backend connection on component mount
-    checkBackendConnection();
-  }, []);
-
-  const checkBackendConnection = async () => {
-    setConnectionStatus('checking');
-    const result = await testConnection();
-    if (result.success) {
-      setConnectionStatus('connected');
-    } else {
-      setConnectionStatus('failed');
-      setError(`Backend connection failed: ${result.message}\n\nPlease make sure the backend server is running on ${apiBaseUrl}`);
-    }
-  };
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+    setFormData((prev) => ({
+      ...prev,
+      [e.target.name]: e.target.value,
+    }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-
-    if (connectionStatus !== 'connected') {
-      setError('Cannot register: Backend server is not connected. Please check if the server is running.');
-      return;
-    }
 
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
@@ -65,28 +44,18 @@ export default function Register() {
     setIsLoading(true);
 
     const { confirmPassword, ...registrationData } = formData;
-    const result = await register(registrationData);
-    
-    if (result.success) {
-      navigate('/dashboard');
-    } else {
-      setError(result.message);
-    }
-    
-    setIsLoading(false);
-  };
 
-  const getConnectionStatusText = () => {
-    switch (connectionStatus) {
-      case 'checking':
-        return '🔍 Checking backend connection...';
-      case 'connected':
-        return '✅ Backend connected';
-      case 'failed':
-        return '❌ Backend connection failed';
-      default:
-        return '';
+    // AuthContext.register will:
+    // - call POST /api/auth/register
+    // - store token & user
+    // - navigate to /dashboard on success
+    const result = await register(registrationData);
+
+    if (!result.success) {
+      setError(result.message || 'Unable to create account');
     }
+
+    setIsLoading(false);
   };
 
   return (
@@ -95,20 +64,6 @@ export default function Register() {
         <div className="auth-header">
           <h1>Join Vynce</h1>
           <p>Create your account and start calling</p>
-        </div>
-
-        {/* Connection Status */}
-        <div className={`connection-status ${connectionStatus}`}>
-          {getConnectionStatusText()}
-          {connectionStatus === 'failed' && (
-            <button 
-              type="button" 
-              className="retry-btn"
-              onClick={checkBackendConnection}
-            >
-              Retry Connection
-            </button>
-          )}
         </div>
 
         {error && (
@@ -131,7 +86,6 @@ export default function Register() {
                 onChange={handleChange}
                 required
                 placeholder="John"
-                disabled={connectionStatus !== 'connected'}
               />
             </div>
 
@@ -145,7 +99,6 @@ export default function Register() {
                 onChange={handleChange}
                 required
                 placeholder="Doe"
-                disabled={connectionStatus !== 'connected'}
               />
             </div>
           </div>
@@ -159,7 +112,6 @@ export default function Register() {
               value={formData.company}
               onChange={handleChange}
               placeholder="Your Company Inc"
-              disabled={connectionStatus !== 'connected'}
             />
           </div>
 
@@ -173,7 +125,6 @@ export default function Register() {
               onChange={handleChange}
               required
               placeholder="john@company.com"
-              disabled={connectionStatus !== 'connected'}
             />
           </div>
 
@@ -188,7 +139,6 @@ export default function Register() {
                 onChange={handleChange}
                 required
                 placeholder="••••••••"
-                disabled={connectionStatus !== 'connected'}
               />
             </div>
 
@@ -202,7 +152,6 @@ export default function Register() {
                 onChange={handleChange}
                 required
                 placeholder="••••••••"
-                disabled={connectionStatus !== 'connected'}
               />
             </div>
           </div>
@@ -214,7 +163,6 @@ export default function Register() {
               name="plan"
               value={formData.plan}
               onChange={handleChange}
-              disabled={connectionStatus !== 'connected'}
             >
               <option value="starter">Starter - $49/month</option>
               <option value="professional">Professional - $99/month</option>
@@ -222,10 +170,10 @@ export default function Register() {
             </select>
           </div>
 
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             className="auth-button"
-            disabled={isLoading || connectionStatus !== 'connected'}
+            disabled={isLoading}
           >
             {isLoading ? 'Creating Account...' : 'Start 14-Day Free Trial'}
           </button>

@@ -10,3 +10,13 @@ app.post("/api/make-call", async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 });
+
+app.get("/api/calls", (req, res) => {
+  // Return all calls (sorted by newest first)
+  const sortedCalls = allCalls.sort((a, b) => {
+    return new Date(b.createdAt) - new Date(a.createdAt)
+  })
+  
+  console.log(`📊 API /calls requested: ${sortedCalls.length} calls`)
+  res.json(sortedCalls)
+})

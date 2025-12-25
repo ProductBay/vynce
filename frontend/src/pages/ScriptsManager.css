@@ -1,233 +1,217 @@
-.scripts-manager {
-  background: white;
-  border-radius: 12px;
-  padding: 2rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+/* src/pages/ScriptsManager.css - Professional Design System */
+
+.scripts-manager-page {
+    padding: 2.5rem;
+    max-width: 1500px;
+    margin: 0 auto;
+    font-family: 'Inter', system-ui, sans-serif;
 }
 
-.scripts-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2rem;
-  padding-bottom: 1rem;
-  border-bottom: 2px solid #f3f4f6;
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e2e8f0;
 }
 
-.scripts-header h2 {
-  margin: 0;
-  color: #1f2937;
-  font-size: 1.5rem;
+.page-header h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0;
 }
 
 .btn-primary {
-  background: #10b981;
-  color: white;
-  border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.2);
 }
 
 .btn-primary:hover {
-  background: #059669;
-  transform: translateY(-1px);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
 }
 
-.btn-secondary {
-  background: #6b7280;
-  color: white;
-  border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
+/* --- Manager Grid --- */
+
+.manager-grid {
+    display: grid;
+    grid-template-columns: 2fr 3fr;
+    gap: 2.5rem;
+    align-items: start;
 }
 
-.btn-secondary:hover {
-  background: #4b5563;
+/* --- Script List --- */
+
+.script-list-container h2 {
+    font-size: 1.25rem;
+    color: #374151;
+    margin-bottom: 1.5rem;
+    padding-left: 0.5rem;
+    border-left: 4px solid #667eea;
 }
 
-/* New Script Form */
-.new-script-form {
-  background: #f8fafc;
-  padding: 2rem;
-  border-radius: 12px;
-  margin-bottom: 2rem;
-  border: 2px solid #e5e7eb;
-}
-
-.new-script-form h3 {
-  margin: 0 0 1.5rem 0;
-  color: #1f2937;
-}
-
-.form-group {
-  margin-bottom: 1.5rem;
-}
-
-.form-group label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-weight: 600;
-  color: #374151;
-}
-
-.form-group input,
-.form-group select,
-.form-group textarea {
-  width: 100%;
-  padding: 0.75rem;
-  border: 2px solid #e5e7eb;
-  border-radius: 8px;
-  font-size: 1rem;
-  transition: border-color 0.2s ease;
-}
-
-.form-group input:focus,
-.form-group select:focus,
-.form-group textarea:focus {
-  outline: none;
-  border-color: #10b981;
-}
-
-.form-group textarea {
-  resize: vertical;
-  min-height: 120px;
-  font-family: inherit;
-}
-
-.form-actions {
-  display: flex;
-  gap: 1rem;
-  justify-content: flex-end;
-}
-
-/* Scripts Grid */
-.scripts-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 1.5rem;
-  margin-bottom: 2rem;
+.script-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    max-height: 80vh;
+    overflow-y: auto;
+    padding-right: 10px; /* Space for scrollbar */
 }
 
 .script-card {
-  background: white;
-  border: 2px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 1.5rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  position: relative;
+    background: white;
+    border-radius: 16px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 1px solid #f1f5f9;
 }
 
 .script-card:hover {
-  border-color: #10b981;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border-color: #a5b4fc;
+    box-shadow: 0 6px 15px rgba(102, 126, 234, 0.1);
 }
 
-.script-card.selected {
-  border-color: #10b981;
-  background: #f0fdf4;
-}
-
-.script-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 1rem;
-}
-
-.script-header h4 {
-  margin: 0;
-  color: #1f2937;
-  font-size: 1.1rem;
-  flex: 1;
+.script-info h3 {
+    margin: 0 0 0.5rem 0;
+    color: #1e293b;
+    font-size: 1.1rem;
+    font-weight: 700;
 }
 
 .script-category {
-  padding: 0.25rem 0.75rem;
-  border-radius: 20px;
-  color: white;
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+    font-size: 0.7rem;
+    background: #eef2ff;
+    color: #4f46e5;
+    padding: 4px 10px;
+    border-radius: 10px;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
 }
 
+.script-card p {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin: 0;
+}
+
+/* --- Editor Panel --- */
+
+.script-editor-container {
+    background: white;
+    padding: 2.5rem;
+    border-radius: 20px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    border: 1px solid #e2e8f0;
+}
+
+.script-editor h2 {
+    font-size: 1.5rem;
+    color: #1e293b;
+    margin-top: 0;
+    margin-bottom: 1.5rem;
+}
+
+.script-editor label {
+    display: block;
+    font-weight: 600;
+    margin-top: 1.25rem;
+    margin-bottom: 0.5rem;
+    color: #475569;
+    font-size: 0.9rem;
+}
+
+.script-editor input, .script-editor textarea, .script-editor select {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    font-size: 1rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.script-editor input:focus, .script-editor textarea:focus, .script-editor select:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    outline: none;
+}
+
+.script-editor textarea {
+    min-height: 200px;
+    resize: vertical;
+}
+
+.button-group {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 2rem;
+}
+
+.btn-secondary {
+    background: #e2e8f0;
+    color: #475569;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+/* Preview */
 .script-preview {
-  color: #6b7280;
-  font-size: 0.9rem;
-  line-height: 1.5;
-  margin-bottom: 1rem;
+    margin-top: 2rem;
+    padding: 1.5rem;
+    border: 2px dashed #fdfdfd;
+    border-radius: 12px;
+    background: #214999;
 }
 
-.script-meta {
-  color: #9ca3af;
-  font-size: 0.75rem;
+.script-preview h3 {
+    margin-top: 0;
+    font-size: 1rem;
+    color: #b5d0f2;
+    margin-bottom: 1rem;
 }
 
-/* Script Detail */
-.script-detail {
-  background: #f8fafc;
-  border-radius: 12px;
-  padding: 2rem;
-  border: 2px solid #e5e7eb;
+.script-preview p {
+    white-space: pre-wrap; /* Preserve formatting */
+    font-size: 0.95rem;
+    line-height: 1.6;
 }
 
-.script-detail-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5rem;
-  padding-bottom: 1rem;
-  border-bottom: 2px solid #e5e7eb;
+/* Editor Placeholder */
+.editor-placeholder {
+    height: 100%;
+    min-height: 500px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #1e4d8e;
+    font-size: 1.2rem;
+    text-align: center;
 }
 
-.script-detail-header h3 {
-  margin: 0;
-  color: #1f2937;
-}
-
-.script-content {
-  background: white;
-  padding: 2rem;
-  border-radius: 8px;
-  border: 1px solid #e5e7eb;
-  margin-bottom: 2rem;
-  line-height: 1.8;
-  white-space: pre-wrap;
-}
-
-.script-content p {
-  margin: 0 0 1rem 0;
-}
-
-.script-content p:last-child {
-  margin-bottom: 0;
-}
-
-.script-placeholders h4 {
-  margin: 0 0 1rem 0;
-  color: #374151;
-}
-
-.placeholders-list {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.placeholder-tag {
-  background: #e5e7eb;
-  color: #374151;
-  padding: 0.5rem 1rem;
-  border-radius: 20px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  border: 1px solid #d1d5db;
+/* Responsive */
+@media (max-width: 992px) {
+    .manager-grid {
+        grid-template-columns: 1fr; /* Stack on smaller screens */
+    }
+    .script-list-container {
+        max-height: 50vh;
+    }
+    .scripts-manager-page {
+        padding: 1.5rem;
+    }
 }

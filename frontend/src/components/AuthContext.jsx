@@ -1,171 +1,113 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+// src/components/AuthContext.jsx
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import API_BASE_URL from '../api';
 
 const AuthContext = createContext();
 
-// Custom hook to use the auth context
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
+export function AuthProvider({ children }) {
+  const navigate = useNavigate();
+  const [user, setUser] = useState(null);      // { firstName, lastName, email, company, isSuperAdmin, subscription, ... }
+  const [loading, setLoading] = useState(true); // true while we check token / load user
 
-// AuthProvider component - THIS MUST BE A NAMED EXPORT
-export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [token, setToken] = useState(localStorage.getItem('vynce_token'));
-
-  const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';  // 👈 FIXED
-
+  // Load current user on initial mount, if a token is stored
   useEffect(() => {
-    if (token) {
-      fetchUserProfile();
-    } else {
+    const token = localStorage.getItem('vynce_token');
+    if (!token) {
       setLoading(false);
+      return;
     }
-  }, [token]);
 
-  const fetchUserProfile = async () => {
-    try {
-      console.log('🔍 Fetching user profile...');
-      const response = await fetch('/api/me', {
-        headers: {
-          'Authorization': `Bearer ${token}`
+    const fetchMe = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok || !data.success) {
+          // token invalid or user not found
+          localStorage.removeItem('vynce_token');
+          setUser(null);
+        } else {
+          setUser(data.user);
         }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setUser(data.user);
-        console.log('✅ User profile loaded:', data.user.email);
-      } else {
-        console.log('❌ Token invalid, logging out');
-        logout();
+      } catch (err) {
+        console.error('Failed to load current user:', err);
+        localStorage.removeItem('vynce_token');
+        setUser(null);
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('❌ Network error fetching profile:', error);
-      logout();
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
 
+    fetchMe();
+  }, []);
+
+  // Login with email/password
   const login = async (email, password) => {
     try {
-      console.log('🔐 Attempting login...');
-      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+      const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
 
-      // Check if we got any response
-      if (!response) {
-        throw new Error('No response from server - check if backend is running');
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data.success) {
+        return { success: false, message: data.message || 'Login failed' };
       }
 
-      const data = await response.json();
-      console.log('Login response:', data);
-
-      if (data.success) {
-        setUser(data.user);
-        setToken(data.token);
-        localStorage.setItem('vynce_token', data.token);
-        return { success: true };
-      } else {
-        return { success: false, message: data.message };
-      }
-    } catch (error) {
-      console.error('❌ Login network error:', error);
-      return { 
-        success: false, 
-        message: `Cannot connect to server: ${error.message}. Please make sure the backend is running on ${API_BASE_URL}` 
-      };
+      localStorage.setItem('vynce_token', data.token);
+      setUser(data.user);
+      navigate('/dashboard');
+      return { success: true };
+    } catch (err) {
+      console.error('Login error:', err);
+      return { success: false, message: err.message };
     }
   };
 
-  const register = async (userData) => {
+  // Register new account (self‑service or for initial admin)
+  const register = async ({ firstName, lastName, email, password, plan }) => {
     try {
-      console.log('📝 Attempting registration...');
-      console.log('Registration data:', userData);
-      
-      const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+      const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(userData),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ firstName, lastName, email, password, plan }),
       });
 
-      // Check if we got any response
-      if (!response) {
-        throw new Error('No response from server - check if backend is running');
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data.success) {
+        return { success: false, message: data.message || 'Registration failed' };
       }
 
-      const data = await response.json();
-      console.log('Registration response:', data);
-
-      if (data.success) {
-        setUser(data.user);
-        setToken(data.token);
-        localStorage.setItem('vynce_token', data.token);
-        return { success: true };
-      } else {
-        return { success: false, message: data.message };
-      }
-    } catch (error) {
-      console.error('❌ Registration network error:', error);
-      return { 
-        success: false, 
-        message: `Cannot connect to server: ${error.message}. Please check:\n\n1. Backend server is running\n2. Backend URL: ${API_BASE_URL}\n3. No CORS issues\n4. Network connectivity` 
-      };
+      localStorage.setItem('vynce_token', data.token);
+      setUser(data.user);
+      navigate('/dashboard');
+      return { success: true };
+    } catch (err) {
+      console.error('Register error:', err);
+      return { success: false, message: err.message };
     }
   };
 
   const logout = () => {
-    console.log('🚪 Logging out...');
-    setUser(null);
-    setToken(null);
     localStorage.removeItem('vynce_token');
-  };
-
-  const testConnection = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/health`);
-      if (response.ok) {
-        const data = await response.json();
-        console.log('✅ Backend connection successful:', data);
-        return { success: true, data };
-      } else {
-        return { success: false, message: `Backend returned ${response.status}` };
-      }
-    } catch (error) {
-      console.error('❌ Backend connection failed:', error);
-      return { success: false, message: error.message };
-    }
-  };
-
-  const value = {
-    user,
-    login,
-    register,
-    logout,
-    loading,
-    token,
-    testConnection,
-    apiBaseUrl: API_BASE_URL
+    setUser(null);
+    navigate('/login');
   };
 
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );
-};
+}
 
-// Default export (optional - you can remove this if you only want named exports)
-export default AuthContext;
+export const useAuth = () => useContext(AuthContext);

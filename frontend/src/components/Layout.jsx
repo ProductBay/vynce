@@ -2,6 +2,7 @@ import React from 'react';
 import Sidebar from './Sidebar.jsx';
 import Topbar from './Topbar.jsx';
 import './Layout.css';
+import Footer from './Footer';    
 
 export default function Layout({ children }) {
   // This function will be passed to Topbar to handle bulk call updates
@@ -18,6 +19,7 @@ export default function Layout({ children }) {
         <div className="content-area">
           {children}
         </div>
+         <Footer />  
       </div>
     </div>
   );

@@ -1,201 +1,180 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import axios from 'axios'; // Ensure you have 'axios' installed (npm i axios)
 import './ScriptsManager.css';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+const API_BASE_URL = 'http://localhost:3001';
 
 export default function ScriptsManager() {
-  const [scripts, setScripts] = useState([]);
-  const [selectedScript, setSelectedScript] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [showNewScriptForm, setShowNewScriptForm] = useState(false);
-  const [newScript, setNewScript] = useState({
-    name: '',
-    content: '',
-    category: 'sales'
-  });
+    const [scripts, setScripts] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [editingScriptId, setEditingScriptId] = useState(null);
+    const [formData, setFormData] = useState({ name: '', content: '', category: 'sales' });
+    const [error, setError] = useState(null);
 
-  useEffect(() => {
-    fetchScripts();
-  }, []);
+    const fetchScripts = useCallback(async () => {
+        setLoading(true);
+        try {
+            const response = await axios.get(`${API_BASE_URL}/api/scripts`);
+            setScripts(response.data.scripts);
+            setError(null);
+        } catch (error) {
+            setError("Failed to load scripts. Check backend console.");
+            console.error('Error fetching scripts:', error);
+            setScripts([]);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
 
-  const fetchScripts = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/scripts`);
-      if (response.ok) {
-        const data = await response.json();
-        setScripts(data.scripts);
-      }
-    } catch (error) {
-      console.error('Error fetching scripts:', error);
-    }
-  };
+    useEffect(() => {
+        fetchScripts();
+    }, [fetchScripts]);
 
-  const handleCreateScript = async (e) => {
-    e.preventDefault();
-    setIsLoading(true);
+    const handleEdit = (script) => {
+        setEditingScriptId(script.id);
+        setFormData({ name: script.name, content: script.content, category: script.category });
+    };
 
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/scripts`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(newScript),
-      });
+    const handleNew = () => {
+        setEditingScriptId('new');
+        setFormData({ name: 'New Script Name', content: '[Agent] introduces Vynce to [Name]...', category: 'sales' });
+    };
 
-      if (response.ok) {
-        const result = await response.json();
-        setScripts(prev => [...prev, result.script]);
-        setNewScript({ name: '', content: '', category: 'sales' });
-        setShowNewScriptForm(false);
-        alert('Script created successfully!');
-      } else {
-        throw new Error('Failed to create script');
-      }
-    } catch (error) {
-      console.error('Error creating script:', error);
-      alert('Error creating script');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    const handleDelete = async (e, id) => {
+        e.stopPropagation();
+        if (!confirm('Are you sure you want to delete this script? This cannot be undone.')) return;
+        
+        try {
+            await axios.delete(`${API_BASE_URL}/api/scripts/${id}`);
+            alert('Script deleted successfully.');
+            fetchScripts();
+        } catch (error) {
+            alert('Failed to delete script. Check if ID exists.');
+            console.error('Delete error:', error);
+        }
+    };
 
-  const categories = [
-    { value: 'sales', label: 'Sales', color: '#10b981' },
-    { value: 'followup', label: 'Follow-up', color: '#3b82f6' },
-    { value: 'support', label: 'Support', color: '#f59e0b' },
-    { value: 'collections', label: 'Collections', color: '#ef4444' },
-    { value: 'general', label: 'General', color: '#6b7280' }
-  ];
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setSaving(true);
 
-  return (
-    <div className="scripts-manager">
-      <div className="scripts-header">
-        <h2>Call Scripts</h2>
-        <button 
-          className="btn-primary"
-          onClick={() => setShowNewScriptForm(true)}
-        >
-          + New Script
-        </button>
-      </div>
+        const isNew = editingScriptId === 'new';
+        const method = isNew ? 'POST' : 'PUT';
+        const url = isNew 
+            ? `${API_BASE_URL}/api/scripts` 
+            : `${API_BASE_URL}/api/scripts/${editingScriptId}`;
+        
+        try {
+            await axios({ method, url, data: formData });
+            
+            setEditingScriptId(null);
+            setSaving(false);
+            fetchScripts();
+            alert(`Script successfully ${isNew ? 'created' : 'updated'}!`);
+        } catch (error) {
+            setError("Failed to save script.");
+            setSaving(false);
+        }
+    };
 
-      {showNewScriptForm && (
-        <div className="new-script-form">
-          <h3>Create New Script</h3>
-          <form onSubmit={handleCreateScript}>
-            <div className="form-group">
-              <label>Script Name</label>
-              <input
-                type="text"
-                value={newScript.name}
-                onChange={(e) => setNewScript({...newScript, name: e.target.value})}
-                placeholder="e.g., Sales Introduction"
-                required
-              />
+    const handleCancel = () => {
+        setEditingScriptId(null);
+        setFormData({ name: '', content: '', category: 'sales' });
+        setError(null);
+    };
+
+    // Helper to format content for display
+    const formatContent = (content, truncate = false) => {
+        let html = content.replace(/\[(\w+)\]/g, (match) => 
+            `<span style="color: #4f46e5; font-weight: 600;">${match}</span>`
+        );
+        if (truncate) {
+            html = html.length > 100 ? html.slice(0, 100) + '...' : html;
+        }
+        return html;
+    };
+
+    return (
+        <div className="scripts-manager-page">
+            <div className="page-header">
+                <h1>📝 Call Script Manager</h1>
+                <button className="btn btn-primary" onClick={handleNew} disabled={editingScriptId !== null}>
+                    + New Script
+                </button>
             </div>
             
-            <div className="form-group">
-              <label>Category</label>
-              <select
-                value={newScript.category}
-                onChange={(e) => setNewScript({...newScript, category: e.target.value})}
-              >
-                {categories.map(cat => (
-                  <option key={cat.value} value={cat.value}>
-                    {cat.label}
-                  </option>
-                ))}
-              </select>
+            {error && <div className="error-message" style={{color: '#dc2626', background: '#fee2e2', padding: '1rem', borderRadius: '8px'}}>{error}</div>}
+
+            <div className="manager-grid">
+                {/* Script List */}
+                <div className="script-list-container">
+                    <h2>Active Scripts ({scripts.length})</h2>
+                    {loading ? (
+                        <div className="loading">Loading scripts...</div>
+                    ) : (
+                        <div className="script-cards">
+                            {scripts.map(script => (
+                                <div 
+                                    key={script.id} 
+                                    className={`script-card ${editingScriptId === script.id ? 'editing' : ''}`} 
+                                    onClick={() => handleEdit(script)}
+                                >
+                                    <div className="script-info">
+                                        <h3>{script.name}</h3>
+                                        <div className="script-category">{script.category.toUpperCase()}</div>
+                                        <p dangerouslySetInnerHTML={{ __html: formatContent(script.content, true) }} />
+                                    </div>
+                                    <div className="script-actions" onClick={e => e.stopPropagation()}>
+                                        <button className="btn btn-edit" onClick={() => handleEdit(script)}>Edit</button>
+                                        <button className="btn btn-delete" onClick={(e) => handleDelete(e, script.id)}>Delete</button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* Editor Panel */}
+                <div className="script-editor-container">
+                    {editingScriptId ? (
+                        <form onSubmit={handleSubmit} className="script-editor">
+                            <h2>{editingScriptId === 'new' ? 'Create New Script' : `Editing: ${formData.name}`}</h2>
+                            
+                            <label>Script Name</label>
+                            <input type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
+
+                            <label>Category</label>
+                            <select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}>
+                                <option value="sales">Sales</option>
+                                <option value="followup">Follow-up</option>
+                                <option value="support">Support</option>
+                                <option value="general">General</option>
+                            </select>
+
+                            <label>Content (Use [Name], [Agent] for dynamic fields)</label>
+                            <textarea value={formData.content} onChange={e => setFormData({...formData, content: e.target.value})} rows="10" required />
+
+                            <div className="button-group">
+                                <button type="button" className="btn btn-secondary" onClick={handleCancel} disabled={saving}>Cancel</button>
+                                <button type="submit" className="btn btn-primary" disabled={saving}>
+                                    {saving ? 'Saving...' : (editingScriptId === 'new' ? 'Create Script' : 'Update Script')}
+                                </button>
+                            </div>
+
+                            <div className="script-preview">
+                                <h3>Live Preview:</h3>
+                                <p dangerouslySetInnerHTML={{ __html: formatContent(formData.content) }} />
+                            </div>
+
+                        </form>
+                    ) : (
+                        <div className="editor-placeholder">
+                            Select a script to edit or click '+ New Script' to begin managing content.
+                        </div>
+                    )}
+                </div>
             </div>
-            
-            <div className="form-group">
-              <label>Script Content</label>
-              <textarea
-                value={newScript.content}
-                onChange={(e) => setNewScript({...newScript, content: e.target.value})}
-                placeholder="Enter your call script here... Use [Name], [Company], [Agent] as placeholders"
-                rows="8"
-                required
-              />
-            </div>
-            
-            <div className="form-actions">
-              <button 
-                type="button" 
-                className="btn-secondary"
-                onClick={() => setShowNewScriptForm(false)}
-              >
-                Cancel
-              </button>
-              <button 
-                type="submit" 
-                className="btn-primary"
-                disabled={isLoading}
-              >
-                {isLoading ? 'Creating...' : 'Create Script'}
-              </button>
-            </div>
-          </form>
         </div>
-      )}
-
-      <div className="scripts-grid">
-        {scripts.map(script => (
-          <div 
-            key={script.id} 
-            className={`script-card ${selectedScript?.id === script.id ? 'selected' : ''}`}
-            onClick={() => setSelectedScript(script)}
-          >
-            <div className="script-header">
-              <h4>{script.name}</h4>
-              <span 
-                className="script-category"
-                style={{ 
-                  backgroundColor: categories.find(c => c.value === script.category)?.color || '#6b7280'
-                }}
-              >
-                {categories.find(c => c.value === script.category)?.label}
-              </span>
-            </div>
-            <div className="script-preview">
-              {script.content.substring(0, 100)}...
-            </div>
-            <div className="script-meta">
-              Created: {new Date(script.createdAt).toLocaleDateString()}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {selectedScript && (
-        <div className="script-detail">
-          <div className="script-detail-header">
-            <h3>{selectedScript.name}</h3>
-            <button 
-              className="btn-secondary"
-              onClick={() => setSelectedScript(null)}
-            >
-              Close
-            </button>
-          </div>
-          <div className="script-content">
-            {selectedScript.content.split('\n').map((line, index) => (
-              <p key={index}>{line}</p>
-            ))}
-          </div>
-          <div className="script-placeholders">
-            <h4>Available Placeholders:</h4>
-            <div className="placeholders-list">
-              <span className="placeholder-tag">[Name]</span>
-              <span className="placeholder-tag">[Company]</span>
-              <span className="placeholder-tag">[Agent]</span>
-              <span className="placeholder-tag">[Date]</span>
-              <span className="placeholder-tag">[Product]</span>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+    );
 }

@@ -1,19 +1,17 @@
-.app-layout {
+.layout-container {
   display: flex;
-  height: 100vh;
-  background: #f8fafc;
+  min-height: 100vh;
+  background: #f8f9fa;
 }
 
 .main-content {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  margin-left: 280px; /* Sidebar width */
+  overflow-x: hidden;
 }
 
-.content-area {
-  flex: 1;
-  padding: 2rem;
-  overflow-y: auto;
-  background: #f8fafc;
+@media (max-width: 768px) {
+  .main-content {
+    margin-left: 0;
+  }
 }

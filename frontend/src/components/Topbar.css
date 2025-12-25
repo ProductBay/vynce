@@ -4,14 +4,31 @@
   box-sizing: border-box;
 }
 
-.topbar {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 1rem 2rem;
-  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
+.modern-topbar {
+  height: 80px;
+  background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2.5rem;
   position: sticky;
   top: 0;
-  z-index: 100;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  z-index: 90;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Left Section */
+.topbar-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.topbar-title {
+  color: white;
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
 }
 
 .topbar-actions {
@@ -21,20 +38,32 @@
   margin-left: auto;
 }
 
-.usage-indicator {
-  background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(10px);
-  padding: 0.5rem 1rem;
-  border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+.breadcrumb {
+  font-size: 0.75rem;
+  color: #9ca3af;
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.875rem;
-  color: white;
-  font-weight: 500;
 }
 
+.separator {
+  color: #4b5563;
+}
+
+.usage-bar {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.usage-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981 0%, #34d399 100%);
+  border-radius: 2px;
+  transition: width 0.5s ease;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+}
 .usage-text {
   white-space: nowrap;
 }
@@ -649,4 +678,256 @@
   .call-number-display {
     font-size: 2rem;
   }
+}
+/* New Call CTA button */
+.new-call-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid #dc2626;        /* red border */
+  background: #ffffff;              /* white background */
+  color: #dc2626;                   /* red text/icon */
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  transition: background-color 0.15s ease, color 0.15s ease,
+    box-shadow 0.15s ease, transform 0.05s ease;
+  margin-right: 8px;                /* space before Upload CSV */
+}
+
+.new-call-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* Hover / active states */
+.new-call-btn:hover:not(:disabled) {
+  background: #dc2626;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(220, 38, 38, 0.35);
+  transform: translateY(-0.5px);
+}
+
+.new-call-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 1px 3px rgba(220, 38, 38, 0.25);
+}
+
+/* Disabled state */
+.new-call-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+/* =========================================
+   FINAL OVERRIDE FOR SINGLE CALL MODAL LAYOUT
+   ========================================= */
+
+.call-modal-overlay .call-modal {
+  width: min(1040px, 96vw) !important;  /* wider card */
+  max-width: none !important;
+  max-height: 95vh !important;
+  border-radius: 24px;
+}
+
+.call-modal-overlay .call-modal-content {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100%;
+  padding: 1.75rem 2rem 1.25rem !important;
+}
+
+/* Two-column body: left = dial pad, right = info */
+.call-modal-overlay .call-modal-body {
+  display: grid !important;
+  grid-template-columns: minmax(320px, 380px) 1fr !important;
+  gap: 18px !important;
+  margin-top: 0.6rem !important;
+  flex: 1 1 auto !important;
+  min-height: 0;
+  align-items: stretch;
+}
+
+/* LEFT COLUMN (dial pad) */
+.call-modal-overlay .call-modal-left {
+  display: flex;
+  flex-direction: column;
+  background: rgba(15, 23, 42, 0.9);
+  border-radius: 18px;
+  padding: 1.1rem 1.25rem 1.2rem;
+  box-shadow: inset 0 0 0 1px rgba(30, 64, 175, 0.4);
+}
+
+.call-modal-overlay .call-modal-left > * {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* RIGHT COLUMN (status + script + notes + CTAs) */
+.call-modal-overlay .call-modal-right {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* Status row */
+.call-modal-overlay .call-status-info {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  background: rgba(15, 23, 42, 0.85);
+  border-radius: 16px;
+  padding: 0.7rem 1rem;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  font-size: 0.9rem;
+}
+
+/* Script + notes cards (reuse your existing look, but make sure they show) */
+.call-modal-overlay .call-script-section,
+.call-modal-overlay .call-notes-section {
+  background: rgba(15, 23, 42, 0.9);
+  border-radius: 16px;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(31, 41, 55, 0.9);
+}
+
+/* CTAs pinned to bottom of right column */
+.call-modal-overlay .call-modal-actions {
+  display: flex !important;
+  justify-content: center;
+  gap: 0.85rem;
+  margin-top: auto;       /* push to bottom of right column */
+  padding-top: 0.8rem;
+}
+
+.call-modal-overlay .save-notes-btn,
+.call-modal-overlay .end-call-cta {
+  flex: 0 0 170px;        /* equal width buttons */
+}
+
+/* Responsive: stack columns on mobile */
+@media (max-width: 900px) {
+  .call-modal-overlay .call-modal {
+    width: calc(100vw - 24px) !important;
+    max-height: calc(100vh - 24px) !important;
+  }
+
+  .call-modal-overlay .call-modal-body {
+    grid-template-columns: 1fr !important;
+  }
+}
+/* ===========================
+   Topbar "New Call" button
+   =========================== */
+
+.topbar .new-call-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: none;
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: #ffffff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(220, 38, 38, 0.45);
+  transition: background 0.15s ease, transform 0.1s ease,
+    box-shadow 0.15s ease;
+  margin-right: 8px; /* space before Upload CSV */
+}
+
+.topbar .new-call-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 22px rgba(220, 38, 38, 0.6);
+}
+
+.topbar .new-call-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 4px 10px rgba(220, 38, 38, 0.5);
+}
+
+.topbar .new-call-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.new-call-icon {
+  font-size: 0.9rem;
+  line-height: 1;
+}
+/* ===========================
+   Call Outcome select styling
+   =========================== */
+
+.outcome-selection select {
+  flex: 1;
+  padding: 0.55rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 175, 0.7);
+  background-color: #0f172a;
+  color: #e5e7eb;
+  font-size: 0.85rem;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: linear-gradient(
+    45deg,
+    transparent 50%,
+    #e5e7eb 50%
+  ),
+  linear-gradient(
+    135deg,
+    #e5e7eb 50%,
+    transparent 50%
+  );
+  background-position:
+    calc(100% - 14px) center,
+    calc(100% - 9px) center;
+  background-size: 8px 8px, 8px 8px;
+  background-repeat: no-repeat;
+}
+
+.outcome-selection select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.7);
+}
+
+/* Ensure dropdown options are readable on all platforms */
+.outcome-selection select option {
+  background-color: #0f172a;
+  color: #e5e7eb;
+}
+/* Close (X) button in call modal header */
+.call-modal-close {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: rgba(209, 213, 219, 0.85);
+  font-size: 1.1rem;
+  border-radius: 999px;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease,
+    transform 0.1s ease;
+}
+
+.call-modal-close:hover {
+  background: rgba(15, 23, 42, 0.9);
+  color: #f9fafb;
+  transform: translateY(-1px);
 }

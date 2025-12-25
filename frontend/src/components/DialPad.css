@@ -1,0 +1,180 @@
+/* ===========================
+   Dial Pad – matches call modal
+   =========================== */
+
+.dialpad-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  color: #e5e7eb;
+}
+
+/* Small local display at top of the pad */
+.dialpad-display {
+  background: rgba(15, 23, 42, 0.95);
+  border-radius: 12px;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid rgba(55, 65, 81, 0.9);
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  overflow: hidden;
+}
+
+.dialpad-display-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  opacity: 0.9;
+}
+
+/* 3×4 grid of keys */
+.dialpad-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin-top: 1rem;
+  flex: 1;
+}
+
+/* Individual key */
+.dialpad-key {
+  position: relative;
+  border-radius: 999px;
+  border: 1px solid rgba(55, 65, 81, 0.9);
+  background: radial-gradient(circle at 30% 20%, #1f2937, #020617);
+  color: #f9fafb;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.8);
+  padding: 0.55rem 0.4rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.06s ease, box-shadow 0.06s ease,
+    background-color 0.15s ease, border-color 0.15s ease;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+.dialpad-key-main {
+  font-size: 1.4rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.dialpad-key-sub {
+  margin-top: 0.1rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.dialpad-key:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.9);
+  border-color: rgba(96, 165, 250, 0.7);
+}
+
+.dialpad-key:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 3px 7px rgba(15, 23, 42, 0.9);
+}
+
+.dialpad-key:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Bottom row: Clear, Backspace, Call */
+.dialpad-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-top: 1.2rem;
+}
+
+.dialpad-action {
+  flex: 1;
+  padding: 0.55rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  transition: background-color 0.15s ease, color 0.15s ease,
+    border-color 0.15s ease, transform 0.06s ease, box-shadow 0.06s ease;
+}
+
+/* Clear = subtle gray */
+.dialpad-clear {
+  background: rgba(15, 23, 42, 0.95);
+  border-color: rgba(55, 65, 81, 0.9);
+  color: #e5e7eb;
+}
+
+.dialpad-clear:hover:not(:disabled) {
+  background: rgba(15, 23, 42, 1);
+}
+
+/* Backspace = neutral */
+.dialpad-backspace {
+  background: rgba(15, 23, 42, 0.95);
+  border-color: rgba(55, 65, 81, 0.9);
+  color: #e5e7eb;
+}
+
+.dialpad-backspace:hover:not(:disabled) {
+  background: rgba(15, 23, 42, 1);
+}
+
+/* Call = green primary */
+.dialpad-call {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  border-color: rgba(21, 128, 61, 0.9);
+  color: #022c22;
+  box-shadow: 0 5px 15px rgba(34, 197, 94, 0.45);
+}
+
+.dialpad-call:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 7px 18px rgba(34, 197, 94, 0.6);
+}
+
+.dialpad-call:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 4px 10px rgba(34, 197, 94, 0.5);
+}
+
+.dialpad-action:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Small screens inside stacked modal */
+@media (max-width: 900px) {
+  .dialpad-root {
+    min-height: 0;
+  }
+
+  .dialpad-grid {
+    gap: 0.75rem;
+  }
+
+  .dialpad-key {
+    padding: 0.5rem 0.35rem;
+  }
+}
