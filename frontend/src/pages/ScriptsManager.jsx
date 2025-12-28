@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios'; // Ensure you have 'axios' installed (npm i axios)
 import './ScriptsManager.css';
 
-const API_BASE_URL = 'http://localhost:3001';
+const API_BASE_URL = 'http://localhost:3000';
 
 export default function ScriptsManager() {
     const [scripts, setScripts] = useState([]);

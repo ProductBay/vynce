@@ -1,73 +1,114 @@
-import { useState, useEffect } from 'react';
-import axios from 'axios';
-import './Dashboard.css';
-
-const API_URL = 'http://localhost:3001'; // Backend port
+// src/pages/Dashboard.jsx
+import { useState, useEffect } from "react";
+import "./Dashboard.css";
+import API_BASE_URL from "../api";
+import { useAuth } from "../components/AuthContext";
 
 export default function Dashboard() {
+  const { authFetch } = useAuth();
+
   const [calls, setCalls] = useState([]);
   const [stats, setStats] = useState({ total: 0, active: 0, completed: 0 });
-  const [phoneNumber, setPhoneNumber] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Fetch calls on mount
-  useEffect(() => {
-    fetchCalls();
-    const interval = setInterval(fetchCalls, 5000); // Refresh every 5s
-    return () => clearInterval(interval);
-  }, []);
-
+  // -----------------------------
+  // FETCH CALLS (AUTHED)
+  // -----------------------------
   const fetchCalls = async () => {
     try {
-      const response = await axios.get(`${API_URL}/api/calls`);
-      setCalls(response.data || []);
-      
-      // Calculate stats
-      const total = response.data.length;
-      const active = response.data.filter(c => ['initiated', 'ringing', 'answered', 'dialing'].includes(c.status)).length;
-      const completed = response.data.filter(c => c.status === 'completed').length;
+      const res = await authFetch(`${API_BASE_URL}/api/calls`);
+      if (!res.ok) return;
+
+      const data = await res.json().catch(() => ({}));
+      const callsArray = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.calls)
+        ? data.calls
+        : [];
+
+      setCalls(callsArray);
+
+      // Stats
+      const total = callsArray.length;
+      const active = callsArray.filter((c) =>
+        ["initiated", "ringing", "answered", "dialing"].includes(c.status)
+      ).length;
+      const completed = callsArray.filter(
+        (c) => c.status === "completed" || c.status === "ended"
+      ).length;
+
       setStats({ total, active, completed });
-    } catch (error) {
-      console.error('Error fetching calls:', error);
+    } catch (err) {
+      console.error("Error fetching calls:", err);
     }
   };
 
+  // -----------------------------
+  // LOAD ON MOUNT
+  // -----------------------------
+  useEffect(() => {
+    fetchCalls();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // -----------------------------
+  // MAKE SINGLE CALL
+  // -----------------------------
   const handleCall = async (e) => {
     e.preventDefault();
+
     if (!phoneNumber.trim()) {
-      alert('Please enter a phone number');
+      alert("Please enter a phone number");
       return;
     }
 
     setLoading(true);
     try {
-      const response = await axios.post(`${API_URL}/api/make-call`, {
-        to: phoneNumber
+      const res = await authFetch(`${API_BASE_URL}/api/make-call`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: phoneNumber }),
       });
-      
-      console.log('Call initiated:', response.data);
-      alert(`✅ Call started to ${phoneNumber}`);
-      setPhoneNumber('');
-      fetchCalls(); // Refresh list
-    } catch (error) {
-      console.error('Error making call:', error);
-      alert('❌ Failed to make call: ' + (error.response?.data?.message || error.message));
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to make call");
+      }
+
+      setPhoneNumber("");
+      fetchCalls();
+    } catch (err) {
+      console.error("Error making call:", err);
+      alert(`❌ Failed to make call: ${err.message}`);
     } finally {
       setLoading(false);
     }
   };
 
+  // -----------------------------
+  // END CALL
+  // -----------------------------
   const endCall = async (uuid) => {
     try {
-      await axios.post(`${API_URL}/api/end-call`, { uuid });
-      alert('Call ended');
+      const res = await authFetch(`${API_BASE_URL}/api/end-call`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uuid }),
+      });
+
+      if (!res.ok) throw new Error("Failed to end call");
       fetchCalls();
-    } catch (error) {
-      console.error('Error ending call:', error);
-      alert('Failed to end call');
+    } catch (err) {
+      console.error("Error ending call:", err);
+      alert("Failed to end call");
     }
   };
 
+  // -----------------------------
+  // UI
+  // -----------------------------
   return (
     <div className="dashboard">
       <h1>📞 Vynce Dashboard</h1>
@@ -88,7 +129,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Single Call Form */}
+      {/* Single Call */}
       <div className="call-form-section">
         <h2>Make a Call</h2>
         <form onSubmit={handleCall} className="call-form">
@@ -101,7 +142,7 @@ export default function Dashboard() {
             className="phone-input"
           />
           <button type="submit" disabled={loading} className="call-btn">
-            {loading ? '📞 Calling...' : '📞 Call Now'}
+            {loading ? "📞 Calling..." : "📞 Call Now"}
           </button>
         </form>
       </div>
@@ -109,8 +150,11 @@ export default function Dashboard() {
       {/* Calls Table */}
       <div className="calls-section">
         <h2>Live Calls ({calls.length})</h2>
+
         {calls.length === 0 ? (
-          <p className="no-calls">No calls yet. Upload CSV or make a single call above.</p>
+          <p className="no-calls">
+            No calls yet. Upload CSV or make a single call above.
+          </p>
         ) : (
           <div className="table-container">
             <table className="calls-table">
@@ -125,18 +169,26 @@ export default function Dashboard() {
               </thead>
               <tbody>
                 {calls.map((call) => (
-                  <tr key={call.uuid || call.id}>
+                  <tr key={call.uuid}>
                     <td className="phone-col">{call.number}</td>
                     <td>
                       <span className={`status-badge ${call.status}`}>
                         {call.status}
                       </span>
                     </td>
-                    <td>{new Date(call.createdAt).toLocaleTimeString()}</td>
-                    <td className="uuid-col">{call.uuid?.substring(0, 8)}...</td>
                     <td>
-                      {['initiated', 'ringing', 'answered', 'dialing'].includes(call.status) && (
-                        <button 
+                      {call.createdAt
+                        ? new Date(call.createdAt).toLocaleTimeString()
+                        : "-"}
+                    </td>
+                    <td className="uuid-col">
+                      {call.uuid?.slice(0, 8)}…
+                    </td>
+                    <td>
+                      {["initiated", "ringing", "answered", "dialing"].includes(
+                        call.status
+                      ) && (
+                        <button
                           onClick={() => endCall(call.uuid)}
                           className="end-btn"
                         >

@@ -10,8 +10,8 @@ export function AppProvider({ children }) {
   const [socket, setSocket] = useState(null)
   const [isConnected, setIsConnected] = useState(false)
 
-  const API_BASE_URL = 'http://localhost:3001'
-  const SOCKET_URL = 'http://localhost:3001'
+  const API_BASE_URL = 'http://localhost:3000'
+  const SOCKET_URL = 'http://localhost:3000'
 
   // Initialize Socket.IO connection
   useEffect(() => {

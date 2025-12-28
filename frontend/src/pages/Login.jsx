@@ -29,15 +29,26 @@ export default function Login() {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSubmitting(true);
-    setError(null);
-    const result = await login(email, password);
-    if (!result.success) {
-      setError(result.message || 'Unable to sign in.');
+  e.preventDefault();
+
+  if (submitting) return; // prevent double‑clicks
+
+  setError(null);
+  setSubmitting(true);
+
+  try {
+    const result = await login(email.trim(), password);
+
+    if (!result?.success) {
+      setError(result?.message || "Unable to sign in.");
     }
+  } catch (err) {
+    console.error("Login error:", err);
+    setError(err.message || "Unable to sign in.");
+  } finally {
     setSubmitting(false);
-  };
+  }
+};
 
  return (
   <div className="auth-page">

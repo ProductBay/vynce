@@ -114,7 +114,7 @@ app.post("/api/auth/login", async (req, res) => {
   });
 });
 
-const PORT = 3001;
+const PORT = 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Test server running on port ${PORT}`);
   console.log(`📍 http://localhost:${PORT}/api/health`);
