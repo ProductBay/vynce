@@ -89,15 +89,6 @@ const io = socketio(server, {
 app.use(cookieParser());
 app.use(bodyParser.json({ limit: "2mb" }));
 app.use(bodyParser.urlencoded({ extended: false }));
-app.use(
-  cors({
-    origin: "http://localhost:5173", // frontend URL
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
-
 
 // ✅ Single, correct CORS setup (no duplicates)
 const allowedOrigins = [
