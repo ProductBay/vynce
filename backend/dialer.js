@@ -1,5 +1,8 @@
 // backend/dialer.js
-require("dotenv").config();
+if (process.env.NODE_ENV !== "production") {
+  require("dotenv").config();
+}
+
 
 const fs = require("fs");
 const http = require("http");
@@ -30,7 +33,7 @@ const ACCESS_TTL = process.env.ACCESS_TTL || "15m";
 const REFRESH_DAYS = Number(process.env.REFRESH_DAYS || 14);
 
 if (!process.env.JWT_SECRET) {
-  console.error("❌ Missing JWT_SECRET in .env");
+ console.error("❌ Missing JWT_SECRET in environment variables");
   process.exit(1);
 }
 
