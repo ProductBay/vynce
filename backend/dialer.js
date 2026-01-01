@@ -50,6 +50,8 @@ mongoose
 // VONAGE
 // ----------------------------
 const privateKey = fs.readFileSync(process.env.VONAGE_PRIVATE_KEY_PATH);
+
+
 const vonage = new Vonage({
   apiKey: process.env.VONAGE_API_KEY,
   apiSecret: process.env.VONAGE_API_SECRET,
