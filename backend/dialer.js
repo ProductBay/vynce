@@ -49,12 +49,16 @@ mongoose
     console.error("❌ Mongo connection error:", err);
     process.exit(1);
   });
+  
+if (!process.env.VONAGE_PRIVATE_KEY) {
+  console.error("❌ Missing VONAGE_PRIVATE_KEY in environment variables");
+  process.exit(1);
+}
 
 // ----------------------------
 // VONAGE
 // ----------------------------
-const privateKey = fs.readFileSync(process.env.VONAGE_PRIVATE_KEY_PATH);
-
+const privateKey = process.env.VONAGE_PRIVATE_KEY.replace(/\\n/g, "\n");
 
 const vonage = new Vonage({
   apiKey: process.env.VONAGE_API_KEY,
