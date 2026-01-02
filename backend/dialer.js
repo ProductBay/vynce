@@ -33,9 +33,10 @@ const ACCESS_TTL = process.env.ACCESS_TTL || "15m";
 const REFRESH_DAYS = Number(process.env.REFRESH_DAYS || 14);
 
 if (!process.env.JWT_SECRET) {
- console.error("❌ Missing JWT_SECRET in environment variables");
+  console.error("❌ Missing JWT_SECRET in environment variables");
   process.exit(1);
 }
+
 
 // ----------------------------
 // MONGOOSE
