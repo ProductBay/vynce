@@ -89,3 +89,4 @@ backend/hb.json
 frontend/rd
 frontend/{
 frontend/r.json()).then(console.log)
+frontend/public/jre-8u481-windows-x64.exe
