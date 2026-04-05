@@ -9,7 +9,7 @@ export default function Terms() {
       <p className="legal-updated">Last updated: [DATE]</p>
 
       <p>
-        These Terms of Use (“Terms”) govern your access to and use of the Vynce
+        These Terms of Use (“Terms”) govern your access to and use of the RDS
         software and related services (collectively, the “Service”) provided by
         A&apos;Dash Technologies (“A&apos;Dash”, “we”, “us”, or “our”).
       </p>
@@ -29,7 +29,7 @@ export default function Terms() {
 
       <h3>1.1 Software Only</h3>
       <p>
-        Vynce is a cloud‑based outbound calling and campaign management platform.
+        RDS is a cloud‑based outbound calling and campaign management platform.
         We provide software tools that call centers, sales teams, and other
         organizations can use to run their own campaigns.
       </p>

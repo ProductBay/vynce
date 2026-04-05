@@ -11,7 +11,7 @@ export default function Privacy() {
       <p>
         This Privacy Policy explains how A&apos;Dash Technologies (“A&apos;Dash”,
         “we”, “us”, or “our”) collects, uses, and protects personal information in
-        connection with the Vynce software and services (the “Service”).
+        connection with the RDS software and services (the “Service”).
       </p>
       <p>
         By using the Service, you agree to the collection and use of information
@@ -27,7 +27,7 @@ export default function Privacy() {
         customers upload or process through the Service (“Customer Data”).
       </p>
       <p>
-        We provide Vynce as a business‑to‑business platform. In many cases, we act
+        We provide RDS as a business‑to‑business platform. In many cases, we act
         as a “data processor” (or equivalent term under applicable law) processing
         Customer Data on behalf of our customers (the “data controllers”).
       </p>
@@ -150,7 +150,7 @@ export default function Privacy() {
       </p>
       <p>
         If you are an end contact (someone being called) and believe your data is
-        processed through Vynce, please contact the organization running the
+        processed through RDS, please contact the organization running the
         campaigns. We may assist them in responding to your request as required by
         law.
       </p>

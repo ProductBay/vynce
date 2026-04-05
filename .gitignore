@@ -26,6 +26,7 @@ backend/node_modules/
 # Vite / React builds
 dist/
 frontend/dist/
+frontend/dist-electron/
 frontend/dist-ssr/
 frontend/build/
 
@@ -78,3 +79,13 @@ uploads/
 # Local / misc
 # ==========================
 *.local
+*.code-workspace
+folder-tree.txt
+tmp-bulk-test.csv
+ngrok.yml
+backend/cd
+backend/git
+backend/hb.json
+frontend/rd
+frontend/{
+frontend/r.json()).then(console.log)

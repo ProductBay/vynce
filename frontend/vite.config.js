@@ -1,12 +1,28 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react({
+      babel: {
+        babelrc: false,
+        configFile: false,
+      },
+    }),
+  ],
   server: {
-    port: 5173,
+    host: "127.0.0.1",
+    port: 5174,
     proxy: {
-      '/api': 'http://localhost:3000'
-    }
-  }
-})
+      "/api": {
+        target: "http://localhost:3000", // Must match the active local backend port
+        changeOrigin: true,
+        secure: false,
+      },
+      "/socket.io": {
+        target: "http://localhost:3000", // Same backend port as /api
+        ws: true,
+      },
+    },
+  },
+});

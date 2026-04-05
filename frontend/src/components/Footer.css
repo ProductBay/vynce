@@ -1,8 +1,8 @@
 /* frontend/src/components/Footer.css */
 
 .app-footer {
-  margin-top: 24px;
-  padding: 14px 20px;
+  margin-top: 14px;
+  padding: 4px 20px;
   border-top: 1px solid #e5e7eb;
   background: #f9fafb;
   display: flex;

@@ -1,6 +1,9 @@
 // backend/models/User.js
-const mongoose = require("mongoose");
+import mongoose from "mongoose";
 
+// =========================
+// REFRESH TOKEN SUB-SCHEMA
+// =========================
 const refreshTokenSchema = new mongoose.Schema(
   {
     tokenHash: {
@@ -31,6 +34,9 @@ const refreshTokenSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// =========================
+// USER SCHEMA
+// =========================
 const userSchema = new mongoose.Schema(
   {
     // =========================
@@ -101,12 +107,32 @@ const userSchema = new mongoose.Schema(
     subscription: {
       plan: {
         type: String,
-        enum: ["starter", "professional", "enterprise"],
+        enum: ["starter", "professional", "team", "enterprise"],
         default: "professional",
       },
       maxCalls: {
         type: Number,
-        default: 5000,
+        default: 0,
+      },
+      unlimitedCalls: {
+        type: Boolean,
+        default: true,
+      },
+      includedActiveUsers: {
+        type: Number,
+        default: 1,
+      },
+      additionalAgentSeats: {
+        type: Number,
+        default: 0,
+      },
+      additionalAgentPrice: {
+        type: Number,
+        default: 0,
+      },
+      monthlyPrice: {
+        type: Number,
+        default: 199,
       },
       active: {
         type: Boolean,
@@ -150,7 +176,6 @@ const userSchema = new mongoose.Schema(
 // =========================
 // INDEXES
 // =========================
-userSchema.index({ email: 1 });
 userSchema.index({ "refreshTokens.expiresAt": 1 });
 
 // =========================
@@ -159,7 +184,9 @@ userSchema.index({ "refreshTokens.expiresAt": 1 });
 userSchema.methods.canMakeCalls = function () {
   return (
     this.subscription?.active === true &&
-    this.subscription?.maxCalls > 0 &&
+    (this.subscription?.unlimitedCalls === true ||
+      !this.subscription?.maxCalls ||
+      this.subscription?.maxCalls > 0) &&
     !this.isDisabled
   );
 };
@@ -182,4 +209,8 @@ userSchema.methods.pruneExpiredRefreshTokens = function () {
   );
 };
 
-module.exports = mongoose.model("User", userSchema);
+// =========================
+// EXPORT MODEL (ES MODULE)
+// =========================
+const User = mongoose.model("User", userSchema);
+export default User;

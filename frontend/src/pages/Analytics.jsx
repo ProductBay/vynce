@@ -1,7 +1,7 @@
 // frontend/src/pages/Analytics.jsx
 import React, { useEffect, useState } from "react";
 import "./Analytics.css";
-import API_BASE_URL from "../api";
+import apiClient from "../apiClient";
 import { useAuth } from "../components/AuthContext";
 import {
   ResponsiveContainer,
@@ -27,30 +27,45 @@ export default function Analytics() {
       setLoading(true);
       setError(null);
       setDenied(false);
+
       try {
-        const res = await fetch(`${API_BASE_URL}/api/analytics/overview`, {
-          credentials: "include", // adjust if you use tokens instead of cookies
+        const res = await apiClient.get("/analytics");
+
+        if (!res.data?.success) {
+          throw new Error(res.data?.message || "Failed to load analytics.");
+        }
+
+        /**
+         * Normalize backend metrics into
+         * the structure this UI already expects
+         */
+        const metrics = res.data.metrics || {};
+
+        setOverview({
+          totalCalls: metrics.totalCalls || 0,
+          avgDurationSeconds: metrics.avgDurationSeconds || 0,
+
+          // Simple outcome breakdown (can expand later)
+          outcomeCounts: {
+            completed: metrics.completed || 0,
+            failed: metrics.failed || 0,
+            voicemail: metrics.voicemail || 0,
+          },
+
+          // Placeholder for future expansion
+          agentCounts: {},
+          callsPerDay: [],
         });
-
-        if (res.status === 403) {
-          setDenied(true);
-          setLoading(false);
-          return;
-        }
-
-        if (!res.ok) {
-          throw new Error(`Server returned ${res.status}`);
-        }
-
-        const data = await res.json();
-        if (data.success) {
-          setOverview(data.data);
-        } else {
-          throw new Error(data.message || "Failed to load analytics.");
-        }
       } catch (err) {
         console.error("Analytics error:", err);
-        setError(err.message || "Could not load analytics.");
+
+        if (err.response?.status === 403) {
+          setDenied(true);
+        } else if (err.response?.status === 404) {
+          setError("Analytics service not available.");
+        } else {
+          setError(err.message || "Could not load analytics.");
+        }
       } finally {
         setLoading(false);
       }
@@ -83,8 +98,7 @@ export default function Analytics() {
         <div>
           <h1>Analytics</h1>
           <p>
-            Understand how your team is using Vynce and how calls are
-            performing.
+            Understand how your team is using Vynce and how calls are performing.
           </p>
         </div>
         {plan && (
@@ -118,7 +132,9 @@ export default function Analytics() {
           {/* Summary cards */}
           <div className="analytics-summary-row">
             <div className="analytics-summary-card">
-              <div className="analytics-summary-label">Total calls (30 days)</div>
+              <div className="analytics-summary-label">
+                Total calls (session)
+              </div>
               <div className="analytics-summary-value">
                 {overview.totalCalls.toLocaleString()}
               </div>
@@ -155,9 +171,11 @@ export default function Analytics() {
 
             {/* Calls per day line chart */}
             <section className="analytics-card">
-              <h2>Calls per day (last 30 days)</h2>
+              <h2>Calls per day</h2>
               {callsPerDayData.length === 0 ? (
-                <p className="analytics-sub">No calls in this period.</p>
+                <p className="analytics-sub">
+                  Daily trends will appear as call history grows.
+                </p>
               ) : (
                 <div className="analytics-chart-container">
                   <ResponsiveContainer width="100%" height={220}>
@@ -180,11 +198,13 @@ export default function Analytics() {
               )}
             </section>
 
-            {/* Calls per agent bar chart */}
+            {/* Agents */}
             <section className="analytics-card analytics-card-span">
               <h2>Top agents by calls</h2>
               {agentData.length === 0 ? (
-                <p className="analytics-sub">No agent data available.</p>
+                <p className="analytics-sub">
+                  Agent analytics will appear once assignments are enabled.
+                </p>
               ) : (
                 <div className="analytics-chart-container">
                   <ResponsiveContainer width="100%" height={260}>
@@ -204,7 +224,11 @@ export default function Analytics() {
                         tick={{ fontSize: 11 }}
                       />
                       <Tooltip />
-                      <Bar dataKey="count" fill="#10b981" radius={[0, 4, 4, 0]} />
+                      <Bar
+                        dataKey="count"
+                        fill="#10b981"
+                        radius={[0, 4, 4, 0]}
+                      />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -216,6 +240,8 @@ export default function Analytics() {
     </div>
   );
 }
+
+/* ---------------- HELPERS ---------------- */
 
 function formatDuration(seconds) {
   if (!seconds || seconds <= 0) return "0s";

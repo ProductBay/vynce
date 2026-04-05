@@ -1,7 +1,6 @@
-// frontend/src/pages/Settings.jsx
 import React, { useEffect, useState } from "react";
 import "./Settings.css";
-import API_BASE_URL from "../api";
+import apiClient from "../apiClient";
 import { useAuth } from "../components/AuthContext";
 
 const TIME_ZONES = [
@@ -10,7 +9,6 @@ const TIME_ZONES = [
   { value: "America/Chicago", label: "US Central (America/Chicago)" },
   { value: "America/Denver", label: "US Mountain (America/Denver)" },
   { value: "America/Los_Angeles", label: "US Pacific (America/Los_Angeles)" },
-  // add more as needed
 ];
 
 export default function Settings() {
@@ -18,10 +16,11 @@ export default function Settings() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [verifying, setVerifying] = useState(false);
 
-  // Settings state
   const [settings, setSettings] = useState({
     callerId: "",
+    vonageApplicationId: "",
     timeZone: "America/Jamaica",
     forwardTo: "",
     publicWebhookUrl: "",
@@ -29,31 +28,41 @@ export default function Settings() {
     enableVoicemailDrop: true,
   });
 
+  const [telephonyCredentials, setTelephonyCredentials] = useState({
+    apiKey: "",
+    apiSecret: "",
+    applicationId: "",
+    privateKey: "",
+    preferredNumber: "",
+  });
+
   const [vonageStatus, setVonageStatus] = useState(null);
   const [vonageAccount, setVonageAccount] = useState(null);
+  const [vonageVerification, setVonageVerification] = useState(null);
+  const [tenantSeats, setTenantSeats] = useState(null);
+  const [addingUser, setAddingUser] = useState(false);
+  const [addUserForm, setAddUserForm] = useState({
+    tenantId: "",
+    firstName: "",
+    lastName: "",
+    email: "",
+    password: "",
+    role: "customer",
+    grantAdditionalSeat: false,
+  });
 
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
 
-  // Mask Vonage API key for display
-  const maskApiKey = (key) => {
-    if (!key) return "";
-    if (key.length <= 4) return key;
-    return key.slice(0, 4) + "••••" + key.slice(-2);
-  };
-
-  // Load settings from backend
   const fetchSettings = async () => {
     setLoading(true);
     setError(null);
+
     try {
-      const res = await fetch(`${API_BASE_URL}/api/settings`);
-      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      const res = await apiClient.get("/settings");
 
-      const data = await res.json();
-
-      if (data.settings) {
-        const s = data.settings;
+      if (res.data?.settings) {
+        const s = res.data.settings;
         setSettings((prev) => ({
           ...prev,
           ...s,
@@ -61,15 +70,33 @@ export default function Settings() {
             typeof s.enableVoicemailDrop === "boolean"
               ? s.enableVoicemailDrop
               : prev.enableVoicemailDrop,
-          timeZone: s.timeZone || prev.timeZone || "America/Jamaica",
+          timeZone: s.timeZone || prev.timeZone,
         }));
       }
 
-      if (data.vonageStatus) setVonageStatus(data.vonageStatus);
-      if (data.vonageAccount) setVonageAccount(data.vonageAccount);
+      setVonageStatus(res.data?.vonageStatus || null);
+      setVonageAccount(res.data?.vonageAccount || null);
+      setVonageVerification(res.data?.vonageVerification || null);
+
+      setTelephonyCredentials((prev) => ({
+        ...prev,
+        applicationId:
+          res.data?.settings?.vonageApplicationId || prev.applicationId || "",
+        preferredNumber:
+          res.data?.vonageAccount?.outboundNumber || prev.preferredNumber || "",
+      }));
+
+      const tenantUsersRes = await apiClient.get("/tenant/users");
+      if (tenantUsersRes.data?.data) {
+        setTenantSeats(tenantUsersRes.data.data);
+        setAddUserForm((prev) => ({
+          ...prev,
+          tenantId: tenantUsersRes.data.data.tenantId || prev.tenantId,
+        }));
+      }
     } catch (err) {
       console.error("Error loading settings:", err);
-      setError(err.message || "Could not load settings.");
+      setError("Could not load settings.");
     } finally {
       setLoading(false);
     }
@@ -77,19 +104,23 @@ export default function Settings() {
 
   useEffect(() => {
     fetchSettings();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Numeric / text / select inputs (bulkDelayMs, callerId, timeZone, forwardTo)
   const handleChange = (e) => {
     const { name, value } = e.target;
     setSettings((prev) => ({
       ...prev,
       [name]: name === "bulkDelayMs" ? Number(value) : value,
     }));
+
+    if (name === "vonageApplicationId") {
+      setTelephonyCredentials((prev) => ({
+        ...prev,
+        applicationId: value,
+      }));
+    }
   };
 
-  // Checkbox toggle (enableVoicemailDrop)
   const handleToggle = (e) => {
     const { name, checked } = e.target;
     setSettings((prev) => ({
@@ -98,7 +129,22 @@ export default function Settings() {
     }));
   };
 
-  // Save settings to backend
+  const handleTelephonyChange = (e) => {
+    const { name, value } = e.target;
+    setTelephonyCredentials((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleAddUserChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setAddUserForm((prev) => ({
+      ...prev,
+      [name]: type === "checkbox" ? checked : value,
+    }));
+  };
+
   const saveSettings = async (e) => {
     e.preventDefault();
     setSaving(true);
@@ -106,27 +152,20 @@ export default function Settings() {
     setSuccess(null);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/settings`, {
-        method: "POST", // keep POST if your backend expects POST here
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          callerId: settings.callerId,
-          timeZone: settings.timeZone,
-          forwardTo: settings.forwardTo,
-          publicWebhookUrl: settings.publicWebhookUrl,
-          bulkDelayMs: settings.bulkDelayMs,
-          enableVoicemailDrop: settings.enableVoicemailDrop,
-        }),
+      const res = await apiClient.post("/settings", {
+        callerId: settings.callerId,
+        vonageApplicationId: settings.vonageApplicationId,
+        timeZone: settings.timeZone,
+        forwardTo: settings.forwardTo,
+        publicWebhookUrl: settings.publicWebhookUrl,
+        bulkDelayMs: settings.bulkDelayMs,
+        enableVoicemailDrop: settings.enableVoicemailDrop,
       });
 
-      if (!res.ok) throw new Error(`Server returned ${res.status}`);
-
-      const data = await res.json();
-
-      if (data.settings) {
+      if (res.data?.settings) {
         setSettings((prev) => ({
           ...prev,
-          ...data.settings,
+          ...res.data.settings,
         }));
       }
 
@@ -134,45 +173,61 @@ export default function Settings() {
       setTimeout(() => setSuccess(null), 4000);
     } catch (err) {
       console.error("Error saving settings:", err);
-      setError(err.message || "Could not save settings. Please try again.");
+      setError("Failed to save settings.");
     } finally {
       setSaving(false);
     }
   };
 
-  // Test Vonage connection + load account info
   const testVonage = async () => {
-    setVonageStatus({ loading: true });
+    setVerifying(true);
+    setVonageStatus({
+      ok: false,
+      code: "VERIFYING",
+      message: "Verifying Vonage credentials...",
+    });
     setVonageAccount(null);
+    setVonageVerification(null);
+    setError(null);
+
     try {
-      const res = await fetch(`${API_BASE_URL}/api/vonage/test`);
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setVonageStatus({
-          ok: true,
-          message: `Connected. Balance: ${data.balance} ${data.currency || ""}`,
-        });
-        setVonageAccount(data.account || null);
-      } else {
-        setVonageStatus({
-          ok: false,
-          message: data.message || `Failed with status ${res.status}`,
-        });
-        setVonageAccount(null);
-      }
+      const res = await apiClient.post("/telephony/vonage/verify", {
+        apiKey: telephonyCredentials.apiKey,
+        apiSecret: telephonyCredentials.apiSecret,
+        applicationId:
+          telephonyCredentials.applicationId || settings.vonageApplicationId,
+        privateKey: telephonyCredentials.privateKey,
+        preferredNumber: telephonyCredentials.preferredNumber,
+      });
+
+      setVonageStatus({
+        ok: true,
+        code: res.data?.verification?.code || "VERIFIED",
+        message: res.data?.verification?.message || "Vonage credentials verified.",
+      });
+      setVonageAccount(res.data?.account || res.data?.verification?.account || null);
+      setVonageVerification(res.data?.verification || null);
+      setTelephonyCredentials((prev) => ({
+        ...prev,
+        apiSecret: "",
+        privateKey: "",
+      }));
     } catch (err) {
       console.error("Vonage test failed:", err);
-      setVonageStatus({ ok: false, message: err.message });
-      setVonageAccount(null);
-    }
-  };
+      const verification = err.response?.data?.verification || null;
 
-  const copyWebhook = async () => {
-    try {
-      await navigator.clipboard.writeText(settings.publicWebhookUrl || "");
-      alert("Webhook URL copied to clipboard");
-    } catch (e) {
-      alert("Could not copy to clipboard");
+      setVonageStatus({
+        ok: false,
+        code: verification?.code || "FAILED",
+        message:
+          verification?.message ||
+          err.response?.data?.message ||
+          "Vonage test failed",
+      });
+      setVonageVerification(verification);
+      setVonageAccount(verification?.account || null);
+    } finally {
+      setVerifying(false);
     }
   };
 
@@ -184,19 +239,54 @@ export default function Settings() {
     ) {
       return;
     }
+
     try {
-      const res = await fetch(`${API_BASE_URL}/api/admin/clear-calls`, {
-        method: "POST",
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
+      const res = await apiClient.post("/admin/clear-calls");
+
+      if (res.data?.success) {
         alert("Call history cleared for this server session.");
       } else {
-        alert(data.message || "Failed to clear history");
+        alert(res.data?.message || "Failed to clear history");
       }
     } catch (err) {
       console.error("Failed to clear history:", err);
-      alert(err.message);
+      alert("Failed to clear call history.");
+    }
+  };
+
+  const createTenantUser = async (e) => {
+    e.preventDefault();
+    setAddingUser(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const res = await apiClient.post("/admin/tenant-users", addUserForm);
+      if (!res.data?.success) {
+        throw new Error(res.data?.message || "Failed to create tenant user.");
+      }
+
+      setTenantSeats(res.data?.data || null);
+      setAddUserForm((prev) => ({
+        ...prev,
+        firstName: "",
+        lastName: "",
+        email: "",
+        password: "",
+        role: "customer",
+        grantAdditionalSeat: false,
+      }));
+      setSuccess("Tenant user created successfully.");
+    } catch (err) {
+      console.error("Failed to create tenant user:", err);
+      setError(
+        err.response?.data?.message || err.message || "Failed to create tenant user."
+      );
+      if (err.response?.data?.data) {
+        setTenantSeats(err.response.data.data);
+      }
+    } finally {
+      setAddingUser(false);
     }
   };
 
@@ -204,50 +294,39 @@ export default function Settings() {
     <div className="settings-page">
       <div className="settings-header">
         <div>
-          <h1>⚙️ Settings</h1>
-          <p>Configure dialer behavior and connection settings.</p>
+          <h1>Settings</h1>
+          <p>Configure dialer behavior, telephony validation, and operational defaults.</p>
         </div>
-        <div className="settings-user">
-          {user && (
-            <>
-              <div className="settings-user-name">
-                {user.firstName} {user.lastName}
-              </div>
-              <div className="settings-user-email">{user.email}</div>
-            </>
-          )}
-        </div>
+        {user ? (
+          <div className="settings-user">
+            <div className="settings-user-name">
+              {user.firstName} {user.lastName}
+            </div>
+            <div className="settings-user-email">{user.email}</div>
+          </div>
+        ) : null}
       </div>
 
       {loading ? (
         <div className="settings-loading">Loading settings...</div>
       ) : (
         <div className="settings-grid">
-          {/* Call & System Settings */}
           <section className="settings-card">
             <h2>Call Settings</h2>
 
             <div className="settings-row">
-              <label htmlFor="callerId">Default caller ID</label>
+              <label>Default caller ID</label>
               <input
-                id="callerId"
                 name="callerId"
                 type="tel"
                 value={settings.callerId || ""}
                 onChange={handleChange}
-                placeholder="+15551234567"
               />
-              <small>
-                This should be a number you are authorized to use with your
-                telephony provider. Vynce does not verify ownership or legal
-                authority to call from this number.
-              </small>
             </div>
 
             <div className="settings-row">
-              <label htmlFor="timeZone">Time zone</label>
+              <label>Time zone</label>
               <select
-                id="timeZone"
                 name="timeZone"
                 value={settings.timeZone}
                 onChange={handleChange}
@@ -258,128 +337,176 @@ export default function Settings() {
                   </option>
                 ))}
               </select>
-              <small>
-                Used for displaying timestamps and (later) scheduling logic in
-                your dashboard.
-              </small>
             </div>
 
             <div className="settings-row">
-              <label htmlFor="forwardTo">Forward to (agent number)</label>
+              <label>Vonage application ID</label>
               <input
-                id="forwardTo"
+                name="vonageApplicationId"
+                type="text"
+                value={settings.vonageApplicationId || ""}
+                onChange={handleChange}
+                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+              />
+            </div>
+
+            <div className="settings-row">
+              <label>Forward to</label>
+              <input
                 name="forwardTo"
                 type="tel"
                 value={settings.forwardTo || ""}
                 onChange={handleChange}
-                placeholder="+15038030780"
               />
-              <small>
-                Number Vynce forwards live calls to. Use E.164 format, e.g.
-                +1XXXXXXXXXX.
-              </small>
             </div>
 
             <div className="settings-row">
-              <label>Public Webhook URL</label>
-              <div className="settings-webhook">
-                <input
-                  type="text"
-                  value={settings.publicWebhookUrl || ""}
-                  readOnly
-                />
-                <button type="button" onClick={copyWebhook}>
-                  Copy
-                </button>
-              </div>
-              <small>
-                Vynce can POST call events to this URL for integrations. This
-                URL is typically configured server‑side.
-              </small>
+              <label>Public webhook URL</label>
+              <input
+                name="publicWebhookUrl"
+                type="url"
+                value={settings.publicWebhookUrl || ""}
+                onChange={handleChange}
+                placeholder="https://your-domain.com"
+              />
             </div>
           </section>
 
-          {/* Vonage Account */}
           <section className="settings-card">
-            <h2>Vonage Account</h2>
+            <h2>Vonage Verification</h2>
             <p className="settings-subtext">
-              View your Vonage Voice account status and open the Vonage
-              dashboard.
+              A real backend verification must succeed before the onboarding telephony step is
+              marked complete.
             </p>
 
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={testVonage}
-            >
-              Test Vonage Connection
-            </button>
+            <div className="settings-row">
+              <label>Vonage API key</label>
+              <input
+                name="apiKey"
+                type="text"
+                value={telephonyCredentials.apiKey}
+                onChange={handleTelephonyChange}
+                placeholder="Enter your Vonage API key"
+              />
+            </div>
 
-            {vonageStatus && (
-              <div
-                className={`vonage-status ${
-                  vonageStatus.ok ? "ok" : "error"
-                }`}
+            <div className="settings-row">
+              <label>Vonage API secret</label>
+              <input
+                name="apiSecret"
+                type="password"
+                value={telephonyCredentials.apiSecret}
+                onChange={handleTelephonyChange}
+                placeholder="Enter your Vonage API secret"
+              />
+            </div>
+
+            <div className="settings-row">
+              <label>Private key</label>
+              <textarea
+                name="privateKey"
+                value={telephonyCredentials.privateKey}
+                onChange={handleTelephonyChange}
+                placeholder="Paste the Vonage application private key"
+                rows={6}
+              />
+            </div>
+
+            <div className="settings-row">
+              <label>Preferred outbound number</label>
+              <input
+                name="preferredNumber"
+                type="tel"
+                value={telephonyCredentials.preferredNumber}
+                onChange={handleTelephonyChange}
+                placeholder="+15551234567"
+              />
+            </div>
+
+            <div className="settings-inline-actions">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={testVonage}
+                disabled={verifying}
               >
-                {vonageStatus.loading
-                  ? "Testing..."
-                  : vonageStatus.message}
-              </div>
-            )}
+                {verifying ? "Verifying..." : "Verify Vonage"}
+              </button>
+            </div>
 
-            {vonageAccount && (
+            {vonageStatus ? (
+              <div className={`vonage-status-card ${vonageStatus.ok ? "ok" : "error"}`}>
+                <div className="vonage-status-top">
+                  <strong>{vonageStatus.ok ? "Verified" : "Verification failed"}</strong>
+                  {vonageStatus.code ? (
+                    <span className="verification-code">{vonageStatus.code}</span>
+                  ) : null}
+                </div>
+                <p>{vonageStatus.message}</p>
+
+                {vonageVerification?.checkedAt ? (
+                  <div className="verification-meta">
+                    Checked: {new Date(vonageVerification.checkedAt).toLocaleString()}
+                  </div>
+                ) : null}
+
+                {vonageVerification?.aiExplanation ? (
+                  <div className="verification-ai">
+                    <strong>AI troubleshooting summary</strong>
+                    <p>{vonageVerification.aiExplanation}</p>
+                  </div>
+                ) : null}
+
+                {Array.isArray(vonageVerification?.suggestedActions) &&
+                vonageVerification.suggestedActions.length > 0 ? (
+                  <div className="verification-actions-list">
+                    <strong>Next steps</strong>
+                    <ul>
+                      {vonageVerification.suggestedActions.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            {vonageAccount ? (
               <div className="vonage-account-summary">
                 <div className="vonage-plan">
-                  Plan:{" "}
-                  <span className="plan-badge">
-                    {vonageAccount.label || "Vonage Voice (pay‑as‑you‑go)"}
-                  </span>
+                  <span className="plan-badge">{vonageAccount.label || "Vonage account"}</span>
                 </div>
-                <div className="vonage-api-key">
-                  API Key:&nbsp;
-                  <span className="mono">
-                    {maskApiKey(vonageAccount.apiKey)}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-link"
-                  onClick={() =>
-                    window.open(
-                      vonageAccount.dashboardUrl ||
-                        "https://dashboard.vonage.com",
-                      "_blank"
-                    )
-                  }
-                >
-                  Open Vonage Dashboard
-                </button>
+                {vonageAccount.apiKeyMasked ? (
+                  <div className="vonage-api-key">
+                    API key: <span className="mono">{vonageAccount.apiKeyMasked}</span>
+                  </div>
+                ) : null}
+                {vonageAccount.applicationId ? (
+                  <div>Application: {vonageAccount.applicationId}</div>
+                ) : null}
+                {vonageAccount.outboundNumber ? (
+                  <div>Outbound number: {vonageAccount.outboundNumber}</div>
+                ) : null}
+                {vonageAccount.balance ? (
+                  <div>
+                    Balance: {vonageAccount.balance} {vonageAccount.currency || ""}
+                  </div>
+                ) : null}
               </div>
-            )}
+            ) : null}
           </section>
 
-          {/* Dialer Configuration */}
           <section className="settings-card">
             <h2>Dialer Configuration</h2>
             <form onSubmit={saveSettings}>
               <div className="settings-row">
-                <label htmlFor="bulkDelayMs">
-                  Delay between bulk calls (milliseconds)
-                </label>
+                <label>Delay between bulk calls (ms)</label>
                 <input
-                  id="bulkDelayMs"
                   name="bulkDelayMs"
                   type="number"
-                  min="0"
-                  max="60000"
-                  step="100"
                   value={settings.bulkDelayMs}
                   onChange={handleChange}
                 />
-                <small>
-                  How long to wait between each call in a bulk CSV campaign.
-                  Higher = slower but safer.
-                </small>
               </div>
 
               <div className="settings-row">
@@ -390,35 +517,25 @@ export default function Settings() {
                     checked={!!settings.enableVoicemailDrop}
                     onChange={handleToggle}
                   />
-                  &nbsp;Enable voicemail drop on answering machines
+                  &nbsp;Enable voicemail drop
                 </label>
-                <small>
-                  When enabled, Vynce will automatically play your active
-                  voicemail script when answering machine detection detects
-                  voicemail.
-                </small>
               </div>
 
-              {error && <div className="settings-error">{error}</div>}
-              {success && <div className="settings-success">{success}</div>}
+              {error ? <div className="settings-error">{error}</div> : null}
+              {success ? <div className="settings-success">{success}</div> : null}
 
               <button
                 type="submit"
                 className="btn btn-primary"
                 disabled={saving}
               >
-                {saving ? "Saving…" : "Save Settings"}
+                {saving ? "Saving..." : "Save Settings"}
               </button>
             </form>
           </section>
 
-          {/* Admin Tools */}
           <section className="settings-card danger-card">
             <h2>Admin Tools</h2>
-            <p className="settings-danger-text">
-              These tools affect only this backend instance. Use carefully in
-              production.
-            </p>
             <button
               type="button"
               className="btn btn-danger"
@@ -426,6 +543,180 @@ export default function Settings() {
             >
               Clear Call History (in-memory)
             </button>
+          </section>
+
+          <section className="settings-card">
+            <h2>Tenant Seats</h2>
+            <p className="settings-subtext">
+              Professional includes one active user by default. Additional tenant users must be
+              provisioned by superadmin.
+            </p>
+
+            {tenantSeats ? (
+              <>
+                <div className="settings-seat-grid">
+                  <div className="settings-seat-stat">
+                    <span>Plan</span>
+                    <strong>{tenantSeats?.commercial?.plan || tenantSeats.plan}</strong>
+                  </div>
+                  <div className="settings-seat-stat">
+                    <span>Included users</span>
+                    <strong>
+                      {tenantSeats?.commercial?.includedUsers ?? tenantSeats.includedActiveUsers}
+                    </strong>
+                  </div>
+                  <div className="settings-seat-stat">
+                    <span>Extra seats</span>
+                    <strong>
+                      {tenantSeats?.commercial?.extraSeats ?? tenantSeats.additionalAgentSeats}
+                    </strong>
+                  </div>
+                  <div className="settings-seat-stat">
+                    <span>Active users</span>
+                    <strong>
+                      {tenantSeats.activeUserCount}/
+                      {Number.isFinite(tenantSeats.totalSeats) ? tenantSeats.totalSeats : "Unlimited"}
+                    </strong>
+                  </div>
+                  <div className="settings-seat-stat">
+                    <span>Commercial status</span>
+                    <strong>{tenantSeats?.commercial?.commercialStatus || "unknown"}</strong>
+                  </div>
+                  <div className="settings-seat-stat">
+                    <span>User provisioning</span>
+                    <strong>{tenantSeats?.canProvisionUser ? "Allowed" : "Blocked"}</strong>
+                  </div>
+                </div>
+
+                {tenantSeats?.commercial?.degraded ? (
+                  <div className="settings-danger-text">
+                    {tenantSeats.commercial.degradedReason ||
+                      "Control plane is unavailable. Commercial operations are temporarily blocked."}
+                  </div>
+                ) : null}
+
+                <div className="settings-seat-users">
+                  {tenantSeats.users?.map((tenantUser) => (
+                    <div key={tenantUser.id} className="settings-seat-user">
+                      <div>
+                        <strong>
+                          {tenantUser.firstName} {tenantUser.lastName}
+                        </strong>
+                        <div className="settings-seat-email">{tenantUser.email}</div>
+                      </div>
+                      <span className="plan-badge">{tenantUser.role}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="settings-loading">Loading seat usage...</div>
+            )}
+
+            {!user?.isSuperAdmin ? (
+              <div className="settings-danger-text">
+                Additional tenant users must be added by a superadmin.
+              </div>
+            ) : null}
+
+            {user?.isSuperAdmin ? (
+              <form className="settings-add-user-form" onSubmit={createTenantUser}>
+                {tenantSeats && !tenantSeats.canProvisionUser ? (
+                  <div className="settings-danger-text">
+                    User provisioning is blocked by commercial seat entitlement. Contact Vynce
+                    support to increase seats or resolve commercial status.
+                  </div>
+                ) : null}
+
+                <div className="settings-row">
+                  <label>Tenant ID</label>
+                  <input
+                    name="tenantId"
+                    type="text"
+                    value={addUserForm.tenantId}
+                    onChange={handleAddUserChange}
+                  />
+                </div>
+
+                <div className="settings-two-column">
+                  <div className="settings-row">
+                    <label>First name</label>
+                    <input
+                      name="firstName"
+                      type="text"
+                      value={addUserForm.firstName}
+                      onChange={handleAddUserChange}
+                    />
+                  </div>
+
+                  <div className="settings-row">
+                    <label>Last name</label>
+                    <input
+                      name="lastName"
+                      type="text"
+                      value={addUserForm.lastName}
+                      onChange={handleAddUserChange}
+                    />
+                  </div>
+                </div>
+
+                <div className="settings-two-column">
+                  <div className="settings-row">
+                    <label>Email</label>
+                    <input
+                      name="email"
+                      type="email"
+                      value={addUserForm.email}
+                      onChange={handleAddUserChange}
+                    />
+                  </div>
+
+                  <div className="settings-row">
+                    <label>Password</label>
+                    <input
+                      name="password"
+                      type="password"
+                      value={addUserForm.password}
+                      onChange={handleAddUserChange}
+                    />
+                  </div>
+                </div>
+
+                <div className="settings-two-column">
+                  <div className="settings-row">
+                    <label>Role</label>
+                    <select
+                      name="role"
+                      value={addUserForm.role}
+                      onChange={handleAddUserChange}
+                    >
+                      <option value="customer">Customer</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  </div>
+
+                  <div className="settings-row settings-row-checkbox">
+                    <label>
+                      <input
+                        name="grantAdditionalSeat"
+                        type="checkbox"
+                        checked={addUserForm.grantAdditionalSeat}
+                        onChange={handleAddUserChange}
+                      />
+                      &nbsp;Grant additional paid seat if needed
+                    </label>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={addingUser || (tenantSeats && !tenantSeats.canProvisionUser)}
+                >
+                  {addingUser ? "Adding User..." : "Add Tenant User"}
+                </button>
+              </form>
+            ) : null}
           </section>
         </div>
       )}

@@ -1,11 +1,10 @@
 // src/pages/Support.jsx
 import React, { useState } from "react";
 import "../styles/Support.css";
-import API_BASE_URL from "../api";
 import { useAuth } from "../components/AuthContext.jsx";
 
 export default function Support() {
-  const { user } = useAuth();
+  const { user, authFetch } = useAuth();
 
   const [form, setForm] = useState({
     name: user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() : "",
@@ -38,7 +37,7 @@ export default function Support() {
 
     setSubmitting(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/support-ticket`, {
+      const res = await authFetch("/api/support-ticket", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
@@ -64,7 +63,7 @@ export default function Support() {
       setStatus({
         type: "error",
         message:
-          "We couldn’t submit your request. Please try again or email support@vynce.ai.",
+          "We couldn’t submit your request. Please try again or email support@RDS.ai.",
       });
     } finally {
       setSubmitting(false);
@@ -77,18 +76,16 @@ export default function Support() {
         <div>
           <h1>Support &amp; Documentation</h1>
           <p>
-            Everything you need to launch and run your call center on Vynce:
+            Everything you need to launch and run your call center on RDS:
             step‑by‑step guides, troubleshooting tips, and direct access to our
             support team.
           </p>
         </div>
         <div className="support-contact-cta">
-          <a href="mailto:support@vynce.ai" className="support-btn-primary">
-            Email Support
+          <a href="https://t.me/Clickthebag" className="support-btn-primary">
+            Telegram Us
           </a>
-          <a href="/tickets/new" className="support-btn-secondary">
-            Request a Callback
-          </a>
+          
         </div>
       </header>
 
@@ -103,9 +100,9 @@ export default function Support() {
       {/* Existing documentation cards */}
       <section className="support-grid">
         <article id="getting-started" className="support-card">
-          <h2>Getting Started with Vynce</h2>
+          <h2>Getting Started with RDS</h2>
           <p className="support-card-subtitle">
-            New to Vynce? Start here to configure your account and place your
+            New to RDS? Start here to configure your account and place your
             first calls.
           </p>
           <ol>
@@ -222,7 +219,7 @@ export default function Support() {
             </li>
             <li>
               If you see repeated failures, contact{" "}
-              <a href="mailto:support@vynce.ai">support@vynce.ai</a> with the
+              <a href="mailto:support@RDS.ai">support@RDS.ai</a> with the
               call UUID from the <strong>Calls</strong> page.
             </li>
           </ul>
@@ -252,7 +249,7 @@ export default function Support() {
 
       {/* Support form at the bottom */}
       <section className="support-form-section">
-        <h2>Contact Vynce Support</h2>
+        <h2>Contact RDS Support</h2>
         <p>
           Can’t find what you’re looking for in the docs? Send us a message and
           our team will respond as soon as possible.

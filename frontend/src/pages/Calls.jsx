@@ -1,359 +1,132 @@
-// src/pages/Calls.jsx - FINAL COMPLETE VERSION (CONTACTS DISPLAYED IN TABLE + MODAL)
-// ✅ FIXES:
-// 1) End Call uses authFetch + proper error handling
-// 2) Save Notes uses authFetch + proper error handling
-// 3) Address displayed in table + modal (kept + hardened)
-// 4) Small UX hardening: disable buttons while ending/saving, UUID guards
-
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import "./Calls.css";
-import API_BASE_URL from "../api";
-import { useAuth } from "../components/AuthContext";
+import { useAppContext } from "../contexts/AppContext";
+import { useLicenseGuard } from "../hooks/useLicenseGuard";
+import LicenseBanner from "../components/LicenseBanner";
 
-export default function Calls() {
-  const [calls, setCalls] = useState([]);
-  const { authFetch } = useAuth();
+const ACTIVE_STATUSES = ["dialing", "ringing", "answered", "initiated"];
 
-  const [filter, setFilter] = useState("all");
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [sortBy, setSortBy] = useState("newest");
-  const [selectedCalls, setSelectedCalls] = useState([]);
-  const [showCallModal, setShowCallModal] = useState(false);
-  const [activeCall, setActiveCall] = useState(null);
-  const [callNotes, setCallNotes] = useState("");
-  const [callOutcome, setCallOutcome] = useState("");
-  const [currentTime, setCurrentTime] = useState(Date.now()); // State for live clock tick
+function getCallType(call) {
+  if (!call) return "single";
+  if (call.callType === "bulk") return "bulk";
+  if (call.callType === "single") return "single";
 
-  // ✅ NEW: action loading guards
-  const [endingUuid, setEndingUuid] = useState(null);
-  const [savingNotes, setSavingNotes] = useState(false);
+  const source = call.source || call.metadata?.source;
+  if (
+    source &&
+    (source.includes(".csv") ||
+      source.includes("CSV") ||
+      source.toLowerCase().includes("upload"))
+  ) {
+    return "bulk";
+  }
 
-  // --- Live Timer Tick (Forces duration update every second) ---
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(Date.now());
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-  // --- End Timer Tick ---
+  if (call.csvRowId !== undefined || call.batchId) {
+    return "bulk";
+  }
 
-  // FETCH CALLS (AUTHED)
-  const fetchCalls = useCallback(async () => {
-    try {
-      const res = await authFetch(`${API_BASE_URL}/api/calls`);
-      if (!res.ok) throw new Error(`Status ${res.status}`);
+  return "single";
+}
 
-      const data = await res.json().catch(() => ({}));
+function formatContactInfo(call) {
+  if (!call) return { name: null, address: "", hasName: false };
 
-      // ✅ NORMALIZE RESPONSE SHAPE
-      const callsArray = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.calls)
-        ? data.calls
-        : [];
+  const metadata = call.metadata || {};
+  const rawName = metadata.name || metadata.firstName || metadata.contactName;
+  const hasName = Boolean(rawName && rawName !== "Unknown" && rawName.trim());
+  const address = [metadata.address, metadata.city, metadata.state, metadata.zip]
+    .filter((part) => part && part.trim() !== "")
+    .join(", ");
 
-      setCalls(callsArray);
+  return {
+    name: hasName ? rawName : null,
+    address,
+    hasName,
+  };
+}
 
-      // ✅ If modal is open, keep activeCall in sync with latest server state
-      if (showCallModal && activeCall?.uuid) {
-        const updated = callsArray.find((c) => c.uuid === activeCall.uuid);
-        if (updated) setActiveCall(updated);
-      }
-    } catch (err) {
-      console.error("❌ Failed to fetch calls:", err);
-      setCalls([]); // never leave stale UI
-    } finally {
-      setLoading(false);
-    }
-  }, [authFetch, showCallModal, activeCall?.uuid]);
+function formatPhone(phone) {
+  if (!phone) return "--";
 
-  useEffect(() => {
-    fetchCalls();
-    const interval = setInterval(fetchCalls, 5000); // Fetch every 5s to sync data
-    return () => clearInterval(interval);
-  }, [fetchCalls]);
+  const clean = phone.toString().replace(/\D/g, "");
+  if (clean.length === 11 && clean.startsWith("1")) {
+    return `+1 (${clean.slice(1, 4)}) ${clean.slice(4, 7)}-${clean.slice(7)}`;
+  }
+  if (clean.length === 10) {
+    return `(${clean.slice(0, 3)}) ${clean.slice(3, 6)}-${clean.slice(6)}`;
+  }
 
-  // CORE FIX: Duration calculation logic
-  const formatDuration = (call) => {
-    const status = call.status;
+  return phone;
+}
 
-    // 1. If the call has a final fixed duration, use it and STOP counting.
-    if (call.duration && call.duration.includes(":")) {
-      return call.duration;
-    }
+function formatTime(date) {
+  if (!date) return "--";
+  return new Date(date).toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
 
-    // Define active states
-    const isActive = ["dialing", "ringing", "answered", "initiated"].includes(
-      status
+function formatDate(date) {
+  if (!date) return "--";
+  return new Date(date).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function formatDuration(call, currentTime) {
+  if (call.duration && call.duration.includes(":")) return call.duration;
+
+  if (ACTIVE_STATUSES.includes(call.status) && call.createdAt) {
+    const diff = Math.floor(
+      (currentTime - new Date(call.createdAt).getTime()) / 1000
     );
+    return `${Math.floor(diff / 60)}:${String(diff % 60).padStart(2, "0")}`;
+  }
 
-    // 2. If status is ACTIVE, calculate LIVE duration.
-    if (isActive && call.createdAt) {
-      const startTime = new Date(call.createdAt).getTime();
-      const diffSeconds = Math.floor((currentTime - startTime) / 1000);
+  return call.duration || "0:00";
+}
 
-      const mins = Math.floor(diffSeconds / 60);
-      const secs = diffSeconds % 60;
-      return `${mins}:${secs.toString().padStart(2, "0")}`;
-    }
-
-    // 3. Default for inactive/non-fixed
-    return call.duration || "0:00";
+function getStatusBadge(status) {
+  const statusStyles = {
+    initiated: { bg: "#dbeafe", color: "#1d4ed8", icon: "Connecting", label: "Initiated" },
+    dialing: { bg: "#fef3c7", color: "#92400e", icon: "Dialing", label: "Dialing" },
+    ringing: { bg: "#e0e7ff", color: "#4338ca", icon: "Ringing", label: "Ringing" },
+    answered: { bg: "#d1fae5", color: "#065f46", icon: "Live", label: "Answered" },
+    completed: { bg: "#f3f4f6", color: "#374151", icon: "Done", label: "Completed" },
+    ended: { bg: "#e5e7eb", color: "#6b7280", icon: "Ended", label: "Ended" },
+    failed: { bg: "#fee2e2", color: "#991b1b", icon: "Failed", label: "Failed" },
+    busy: { bg: "#fef3c7", color: "#92400e", icon: "Busy", label: "Busy" },
+    voicemail: { bg: "#fae8ff", color: "#86198f", icon: "VM", label: "Voicemail" },
+    queued: { bg: "#f0fdf4", color: "#166534", icon: "Queued", label: "Queued" },
   };
 
-  // ✅ End single call (AUTHED) — FIXED
-  const endCall = async (uuid) => {
-    if (!uuid) return;
+  const style = statusStyles[status] || statusStyles.ended;
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "6px",
+        padding: "6px 14px",
+        borderRadius: "20px",
+        fontSize: "13px",
+        fontWeight: "600",
+        background: style.bg,
+        color: style.color,
+      }}
+    >
+      <span>{style.icon}</span>
+      <span>{style.label}</span>
+    </span>
+  );
+}
 
-    setEndingUuid(uuid);
-    try {
-      const res = await authFetch(`${API_BASE_URL}/api/end-call`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uuid }),
-      });
-
-      const result = await res.json().catch(() => ({}));
-
-      if (!res.ok || result?.success === false) {
-        throw new Error(result?.message || `Failed to end call (HTTP ${res.status})`);
-      }
-
-      // Fetch immediately after successful end to get the final duration/status
-      await fetchCalls();
-
-      // If you ended the call currently open in the modal, close it
-      if (activeCall?.uuid === uuid) {
-        setShowCallModal(false);
-        setActiveCall(null);
-      }
-    } catch (err) {
-      console.error("❌ Failed to end call:", err);
-      alert(`Failed to end call: ${err.message}`);
-    } finally {
-      setEndingUuid(null);
-    }
-  };
-
-  // End multiple calls
-  const endSelectedCalls = async () => {
-    if (selectedCalls.length === 0) return;
-
-    // End sequentially to avoid hammering the API and to preserve clean UX
-    for (const uuid of selectedCalls) {
-      // eslint-disable-next-line no-await-in-loop
-      await endCall(uuid);
-    }
-    setSelectedCalls([]);
-  };
-
-  // ✅ Save call notes (AUTHED) — FIXED
-  const saveCallNotes = async () => {
-    if (!activeCall?.uuid) return;
-
-    setSavingNotes(true);
-    try {
-      const res = await authFetch(
-        `${API_BASE_URL}/api/calls/${activeCall.uuid}/notes`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            content: callNotes,
-            outcome: callOutcome,
-          }),
-        }
-      );
-
-      const result = await res.json().catch(() => ({}));
-
-      if (!res.ok || result?.success === false) {
-        throw new Error(result?.message || `Failed to save notes (HTTP ${res.status})`);
-      }
-
-      alert("✅ Notes saved!");
-      setShowCallModal(false);
-      setActiveCall(null);
-      await fetchCalls();
-    } catch (err) {
-      console.error("❌ Failed to save notes:", err);
-      alert(`Failed to save notes: ${err.message}`);
-    } finally {
-      setSavingNotes(false);
-    }
-  };
-
-  // Open call detail modal
-  const openCallModal = (call) => {
-    setActiveCall(call);
-    setCallNotes(call.notes || "");
-    setCallOutcome(call.outcome || "");
-    setShowCallModal(true);
-  };
-
-  // Helper to extract and structure contact info for rendering
-  const formatContactInfo = (call) => {
-    if (!call || !call.number) return { name: "Unknown", address: "" };
-
-    // Use metadata as the source
-    const name = call.metadata?.name || "Unknown";
-    const address = call.metadata?.address || "";
-
-    return { name, address };
-  };
-  // ---- Address formatter (street + city + state + zip) ----
-const formatFullAddress = (metadata = {}) => {
-  if (!metadata || typeof metadata !== "object") return "";
-
-  const parts = [
-    metadata.address,
-    metadata.city,
-    metadata.state,
-    metadata.zip,
-  ].filter(Boolean);
-
-  return parts.join(", ");
-};
-  // ---- End Address formatter ----
-  // Format phone number
-  const formatPhone = (phone) => {
-    if (!phone) return "--";
-    const clean = phone.toString().replace(/\D/g, "");
-    if (clean.length === 11 && clean.startsWith("1")) {
-      return `+1 (${clean.slice(1, 4)}) ${clean.slice(4, 7)}-${clean.slice(
-        7
-      )}`;
-    }
-    if (clean.length === 10) {
-      return `(${clean.slice(0, 3)}) ${clean.slice(3, 6)}-${clean.slice(6)}`;
-    }
-    return phone;
-  };
-
-  // Format time (kept existing logic)
-  const formatTime = (date) => {
-    if (!date) return "--";
-    return new Date(date).toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
-  };
-
-  // Format date (kept existing logic)
-  const formatDate = (date) => {
-    if (!date) return "--";
-    return new Date(date).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  };
-
-  // Status badge (kept existing logic)
-  const getStatusBadge = (status) => {
-    const statusStyles = {
-      initiated: {
-        bg: "#dbeafe",
-        color: "#1d4ed8",
-        icon: "🔄",
-        label: "Initiated",
-      },
-      dialing: {
-        bg: "#fef3c7",
-        color: "#92400e",
-        icon: "📞",
-        label: "Dialing",
-      },
-      ringing: {
-        bg: "#e0e7ff",
-        color: "#4338ca",
-        icon: "🔔",
-        label: "Ringing",
-      },
-      answered: {
-        bg: "#d1fae5",
-        color: "#065f46",
-        icon: "✅",
-        label: "Answered",
-      },
-      completed: {
-        bg: "#f3f4f6",
-        color: "#374151",
-        icon: "✓",
-        label: "Completed",
-      },
-      ended: {
-        bg: "#e5e7eb",
-        color: "#6b7280",
-        icon: "⏹️",
-        label: "Ended",
-      },
-      failed: {
-        bg: "#fee2e2",
-        color: "#991b1b",
-        icon: "❌",
-        label: "Failed",
-      },
-      busy: {
-        bg: "#fef3c7",
-        color: "#92400e",
-        icon: "📵",
-        label: "Busy",
-      },
-      voicemail: {
-        bg: "#fae8ff",
-        color: "#86198f",
-        icon: "📬",
-        label: "Voicemail",
-      },
-      queued: {
-        bg: "#f0fdf4",
-        color: "#166534",
-        icon: "⏳",
-        label: "Queued",
-      },
-    };
-    const s = statusStyles[status] || statusStyles.ended;
-    return (
-      <span
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: "6px",
-          padding: "6px 14px",
-          borderRadius: "20px",
-          fontSize: "13px",
-          fontWeight: "600",
-          background: s.bg,
-          color: s.color,
-        }}
-      >
-        <span>{s.icon}</span>
-        <span>{s.label}</span>
-      </span>
-    );
-  };
-
-  // Type badge (kept existing logic)
-  const getTypeBadge = (type) => {
-    if (type === "bulk" || type === "csv") {
-      return (
-        <span
-          style={{
-            padding: "4px 10px",
-            borderRadius: "12px",
-            fontSize: "12px",
-            fontWeight: "500",
-            background: "#dbeafe",
-            color: "#1d4ed8",
-          }}
-        >
-          📋 Bulk/CSV
-        </span>
-      );
-    }
+function getTypeBadge(type) {
+  if (type === "bulk" || type === "csv") {
     return (
       <span
         style={{
@@ -361,52 +134,91 @@ const formatFullAddress = (metadata = {}) => {
           borderRadius: "12px",
           fontSize: "12px",
           fontWeight: "500",
-          background: "#f0fdf4",
-          color: "#166534",
+          background: "#dbeafe",
+          color: "#1d4ed8",
         }}
       >
-        📞 Single
+        Bulk/CSV
       </span>
     );
-  };
+  }
 
-  // Filter and sort calls (kept existing logic)
-  const getFilteredCalls = () => {
-    let filtered = [...calls];
+  return (
+    <span
+      style={{
+        padding: "4px 10px",
+        borderRadius: "12px",
+        fontSize: "12px",
+        fontWeight: "500",
+        background: "#f0fdf4",
+        color: "#166534",
+      }}
+    >
+      Single
+    </span>
+  );
+}
 
-    // Filter by status
+export default function Calls() {
+  const { calls, loadingCalls, endCall, saveCallNotes } = useAppContext();
+  const { loading: licenseLoading, canCall, reason } = useLicenseGuard();
+  const [filter, setFilter] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortBy, setSortBy] = useState("newest");
+  const [selectedCalls, setSelectedCalls] = useState([]);
+  const [showCallModal, setShowCallModal] = useState(false);
+  const [activeCallId, setActiveCallId] = useState(null);
+  const [callNotes, setCallNotes] = useState("");
+  const [callOutcome, setCallOutcome] = useState("");
+  const [currentTime, setCurrentTime] = useState(Date.now());
+  const [endingUuid, setEndingUuid] = useState(null);
+  const [savingNotes, setSavingNotes] = useState(false);
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const activeCall = useMemo(
+    () => calls.find((call) => (call._id || call.uuid) === activeCallId) || null,
+    [activeCallId, calls]
+  );
+
+  useEffect(() => {
+    if (!activeCall) return;
+    setCallNotes(activeCall.notes || "");
+    setCallOutcome(activeCall.outcome || "");
+  }, [activeCall]);
+
+  const filteredCalls = useMemo(() => {
+    let nextCalls = [...calls];
+
     if (filter === "active") {
-      filtered = filtered.filter((c) =>
-        ["dialing", "ringing", "answered", "initiated"].includes(c.status)
-      );
+      nextCalls = nextCalls.filter((call) => ACTIVE_STATUSES.includes(call.status));
     } else if (filter === "completed") {
-      filtered = filtered.filter((c) =>
-        ["completed", "ended"].includes(c.status)
+      nextCalls = nextCalls.filter((call) =>
+        ["completed", "ended"].includes(call.status)
       );
     } else if (filter === "failed") {
-      filtered = filtered.filter((c) => ["failed", "busy"].includes(c.status));
+      nextCalls = nextCalls.filter((call) => ["failed", "busy"].includes(call.status));
     } else if (filter === "voicemail") {
-      filtered = filtered.filter(
-        (c) => c.status === "voicemail" || c.voicemailDetected
+      nextCalls = nextCalls.filter(
+        (call) => call.status === "voicemail" || call.voicemailDetected
       );
     }
 
-    // Search filter
     if (searchTerm) {
       const search = searchTerm.toLowerCase();
-      filtered = filtered.filter(
-        (c) =>
-          c.number?.toLowerCase().includes(search) ||
-          c.metadata?.name?.toLowerCase().includes(search) ||
-          c.status?.toLowerCase().includes(search)
+      nextCalls = nextCalls.filter(
+        (call) =>
+          (call.number || call.to || "").toLowerCase().includes(search) ||
+          (call.metadata?.name || "").toLowerCase().includes(search) ||
+          (call.status || "").toLowerCase().includes(search)
       );
     }
 
-    // Sort
-    if (sortBy === "newest") {
-      filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    } else if (sortBy === "oldest") {
-      filtered.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    if (sortBy === "oldest") {
+      nextCalls.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
     } else if (sortBy === "status") {
       const statusOrder = [
         "answered",
@@ -418,100 +230,163 @@ const formatFullAddress = (metadata = {}) => {
         "ended",
         "failed",
       ];
-      filtered.sort(
+      nextCalls.sort(
         (a, b) => statusOrder.indexOf(a.status) - statusOrder.indexOf(b.status)
       );
+    } else {
+      nextCalls.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     }
 
-    return filtered;
+    return nextCalls;
+  }, [calls, filter, searchTerm, sortBy]);
+
+  const stats = useMemo(
+    () => ({
+      total: calls.length,
+      active: calls.filter((call) => ACTIVE_STATUSES.includes(call.status)).length,
+      completed: calls.filter((call) => ["completed", "ended"].includes(call.status))
+        .length,
+      failed: calls.filter((call) => ["failed", "busy"].includes(call.status)).length,
+      voicemail: calls.filter(
+        (call) => call.status === "voicemail" || call.voicemailDetected
+      ).length,
+    }),
+    [calls]
+  );
+
+  const openCallModal = (call) => {
+    setActiveCallId(call._id || call.uuid);
+    setShowCallModal(true);
   };
 
-  const filteredCalls = getFilteredCalls();
-
-  // Stats (kept existing logic)
-  const stats = {
-    total: calls.length,
-    active: calls.filter((c) =>
-      ["dialing", "ringing", "answered", "initiated"].includes(c.status)
-    ).length,
-    completed: calls.filter((c) => ["completed", "ended"].includes(c.status))
-      .length,
-    failed: calls.filter((c) => ["failed", "busy"].includes(c.status)).length,
-    voicemail: calls.filter((c) => c.status === "voicemail" || c.voicemailDetected)
-      .length,
+  const closeCallModal = () => {
+    setShowCallModal(false);
+    setActiveCallId(null);
   };
 
-  // Toggle call selection (kept existing logic)
+  const handleEndCall = async (uuid) => {
+    if (!uuid) {
+      alert("Call UUID is missing. Cannot end call.");
+      return;
+    }
+
+    setEndingUuid(uuid);
+    try {
+      await endCall(uuid);
+    } catch (error) {
+      console.error("End call failed:", error);
+      alert(`Failed to end call: ${error.message}`);
+    } finally {
+      setEndingUuid(null);
+    }
+  };
+
+  const handleEndSelectedCalls = async () => {
+    for (const uuid of selectedCalls.filter(Boolean)) {
+      await handleEndCall(uuid);
+    }
+    setSelectedCalls([]);
+  };
+
+  const handleSaveCallNotes = async () => {
+    if (!activeCall?.uuid) {
+      alert("Cannot save notes, call ID is missing.");
+      return;
+    }
+
+    setSavingNotes(true);
+    try {
+      await saveCallNotes({
+        uuid: activeCall.uuid,
+        content: callNotes,
+        outcome: callOutcome,
+      });
+      alert("Notes saved successfully!");
+      closeCallModal();
+    } catch (error) {
+      console.error("Failed to save notes:", error);
+      alert(`Failed to save notes: ${error.message}`);
+    } finally {
+      setSavingNotes(false);
+    }
+  };
+
   const toggleCallSelection = (uuid) => {
     if (!uuid) return;
-    if (selectedCalls.includes(uuid)) {
-      setSelectedCalls(selectedCalls.filter((id) => id !== uuid));
-    } else {
-      setSelectedCalls([...selectedCalls, uuid]);
-    }
+    setSelectedCalls((previous) =>
+      previous.includes(uuid)
+        ? previous.filter((selectedUuid) => selectedUuid !== uuid)
+        : [...previous, uuid]
+    );
   };
 
-  // Select all visible calls (kept existing logic)
   const selectAllCalls = () => {
     if (selectedCalls.length === filteredCalls.length) {
       setSelectedCalls([]);
-    } else {
-      setSelectedCalls(filteredCalls.map((c) => c.uuid).filter(Boolean));
+      return;
     }
+    setSelectedCalls(filteredCalls.map((call) => call.uuid).filter(Boolean));
   };
 
   return (
     <div className="calls-page">
-      {/* Page Header */}
+      {!licenseLoading && reason && <LicenseBanner message={reason} />}
+
+      {licenseLoading && (
+        <div style={{ marginBottom: 12, opacity: 0.7 }}>Checking license...</div>
+      )}
+
       <div className="page-header">
         <div className="header-left">
-          <h1>📞 Calls Dashboard</h1>
-          <p className="header-subtitle">Live view of all calls - Single & Bulk CSV</p>
+          <h1>Calls Dashboard</h1>
+          <p className="header-subtitle">
+            Live view of all calls - Single and Bulk CSV
+          </p>
         </div>
         <div className="header-right">
-          <button onClick={fetchCalls} className="btn btn-secondary">
-            🔄 Refresh
-          </button>
           {selectedCalls.length > 0 && (
-            <button onClick={endSelectedCalls} className="btn btn-danger">
-              🛑 End {selectedCalls.length} Calls
+            <button
+              onClick={handleEndSelectedCalls}
+              className="btn btn-danger"
+              disabled={!canCall || licenseLoading}
+            >
+              End {selectedCalls.length} Calls
             </button>
           )}
         </div>
       </div>
 
-      {/* Stats Cards */}
       <div className="stats-grid">
         <div className="stat-card total" onClick={() => setFilter("all")}>
-          <div className="stat-icon">📊</div>
+          <div className="stat-icon">Stats</div>
           <div className="stat-content">
             <div className="stat-number">{stats.total}</div>
             <div className="stat-label">Total Calls</div>
           </div>
         </div>
         <div className="stat-card active" onClick={() => setFilter("active")}>
-          <div className="stat-icon pulse">📞</div>
+          <div className="stat-icon pulse">Live</div>
           <div className="stat-content">
             <div className="stat-number">{stats.active}</div>
             <div className="stat-label">Active Now</div>
           </div>
         </div>
         <div className="stat-card completed" onClick={() => setFilter("completed")}>
-          <div className="stat-icon">✅</div>
+          <div className="stat-icon">Done</div>
           <div className="stat-content">
             <div className="stat-number">{stats.completed}</div>
             <div className="stat-label">Completed</div>
           </div>
         </div>
         <div className="stat-card failed" onClick={() => setFilter("failed")}>
-          <div className="stat-icon">❌</div>
+          <div className="stat-icon">Fail</div>
           <div className="stat-content">
             <div className="stat-number">{stats.failed}</div>
             <div className="stat-label">Failed</div>
           </div>
         </div>
         <div className="stat-card voicemail" onClick={() => setFilter("voicemail")}>
-          <div className="stat-icon">📬</div>
+          <div className="stat-icon">VM</div>
           <div className="stat-content">
             <div className="stat-number">{stats.voicemail}</div>
             <div className="stat-label">Voicemail</div>
@@ -519,7 +394,6 @@ const formatFullAddress = (metadata = {}) => {
         </div>
       </div>
 
-      {/* Filters & Search */}
       <div className="controls-bar">
         <div className="filter-tabs">
           {[
@@ -528,24 +402,22 @@ const formatFullAddress = (metadata = {}) => {
             { key: "completed", label: "Completed" },
             { key: "failed", label: "Failed" },
             { key: "voicemail", label: "Voicemail" },
-          ].map((f) => (
+          ].map((entry) => (
             <button
-              key={f.key}
-              className={`filter-btn ${filter === f.key ? "active" : ""}`}
-              onClick={() => setFilter(f.key)}
+              key={entry.key}
+              className={`filter-btn ${filter === entry.key ? "active" : ""}`}
+              onClick={() => setFilter(entry.key)}
             >
-              {f.label}
-              {f.key !== "all" && (
+              {entry.label}
+              {entry.key !== "all" && (
                 <span className="filter-count">
-                  {f.key === "active"
+                  {entry.key === "active"
                     ? stats.active
-                    : f.key === "completed"
+                    : entry.key === "completed"
                     ? stats.completed
-                    : f.key === "failed"
+                    : entry.key === "failed"
                     ? stats.failed
-                    : f.key === "voicemail"
-                    ? stats.voicemail
-                    : ""}
+                    : stats.voicemail}
                 </span>
               )}
             </button>
@@ -554,16 +426,16 @@ const formatFullAddress = (metadata = {}) => {
 
         <div className="controls-right">
           <div className="search-box">
-            <span className="search-icon">🔍</span>
+            <span className="search-icon">Search</span>
             <input
               type="text"
               placeholder="Search by number, name, status..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(event) => setSearchTerm(event.target.value)}
             />
             {searchTerm && (
               <button className="clear-search" onClick={() => setSearchTerm("")}>
-                ✕
+                x
               </button>
             )}
           </div>
@@ -571,7 +443,7 @@ const formatFullAddress = (metadata = {}) => {
           <select
             className="sort-select"
             value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
+            onChange={(event) => setSortBy(event.target.value)}
           >
             <option value="newest">Newest First</option>
             <option value="oldest">Oldest First</option>
@@ -580,16 +452,15 @@ const formatFullAddress = (metadata = {}) => {
         </div>
       </div>
 
-      {/* Calls Table */}
       <div className="calls-table-container">
-        {loading ? (
+        {loadingCalls ? (
           <div className="loading-state">
             <div className="spinner"></div>
             <p>Loading calls...</p>
           </div>
         ) : filteredCalls.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-icon">📭</div>
+            <div className="empty-icon">Empty</div>
             <h3>No calls found</h3>
             <p>
               {filter !== "all"
@@ -623,70 +494,81 @@ const formatFullAddress = (metadata = {}) => {
               </tr>
             </thead>
             <tbody>
-              {filteredCalls.map((call, idx) => {
-                const contact = formatContactInfo(call); // Get structured contact data
+              {filteredCalls.map((call) => {
+                const contact = formatContactInfo(call);
                 const uuid = call.uuid;
 
                 return (
                   <tr
-                  
-                    key={uuid || idx}
-                    className={`call-row ${uuid && selectedCalls.includes(uuid) ? "selected" : ""}`}
+                    key={call._id || call.uuid}
+                    className={selectedCalls.includes(call.uuid) ? "call-row selected" : "call-row"}
                     onClick={() => openCallModal(call)}
                   >
-                    <td className="checkbox-col" onClick={(e) => e.stopPropagation()}>
+                    <td className="checkbox-col" onClick={(event) => event.stopPropagation()}>
                       <input
                         type="checkbox"
-                        checked={uuid ? selectedCalls.includes(uuid) : false}
-                        onChange={() => toggleCallSelection(uuid)}
-                        disabled={!uuid}
+                        checked={selectedCalls.includes(call.uuid)}
+                        onChange={() => toggleCallSelection(call.uuid)}
+                        disabled={!call.uuid}
                       />
                     </td>
-
-                    {/* CONTACT CELL (Name + Address + Phone) */}
                     <td className="contact-cell">
                       <div className="contact-info">
-                        <span className="phone-number">{formatPhone(call.number)}</span>
-                        {contact.name !== "Unknown" && (
-                          <span className="contact-name">👤 {contact.name}</span>
+                        {contact.hasName ? (
+                          <>
+                            <div className="contact-name">{contact.name}</div>
+                            <div className="contact-phone-sub">
+                              {formatPhone(call.number || call.to)}
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="contact-name" style={{ color: "#e2e8f0" }}>
+                              {formatPhone(call.number || call.to)}
+                            </div>
+                            <div className="contact-sub-label">
+                              {call.callType === "bulk" ? "Unknown Contact" : "Manual Dial"}
+                            </div>
+                          </>
                         )}
                         {contact.address && (
-                          <span className="contact-address">📍 {contact.address}</span>
+                          <div className="contact-address">{contact.address}</div>
                         )}
                       </div>
                     </td>
-
                     <td>{getStatusBadge(call.status)}</td>
-                    <td>{getTypeBadge(call.type)}</td>
-
-                    {/* DURATION CELL (Uses formatDuration) */}
-                    <td className="duration-cell" style={{ fontWeight: "600", fontFamily: "monospace" }}>
+                    <td>{getTypeBadge(getCallType(call))}</td>
+                    <td
+                      className="duration-cell"
+                      style={{ fontWeight: "600", fontFamily: "monospace" }}
+                    >
                       <span className="live-duration">
-                        {formatDuration(call)}
-                        {["dialing", "ringing", "answered", "initiated"].includes(call.status) && " ⏱️"}
+                        {formatDuration(call, currentTime)}
+                        {ACTIVE_STATUSES.includes(call.status) && " live"}
                       </span>
                     </td>
-
                     <td className="time-cell">
                       <div className="time-info">
                         <span className="time">{formatTime(call.createdAt)}</span>
                         <span className="date">{formatDate(call.createdAt)}</span>
                       </div>
                     </td>
-
-                    <td className="actions-cell" onClick={(e) => e.stopPropagation()}>
-                      {["dialing", "ringing", "answered", "initiated"].includes(call.status) ? (
+                    <td
+                      className="actions-cell"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      {ACTIVE_STATUSES.includes(call.status) ? (
                         <button
                           className="btn btn-end"
-                          onClick={() => endCall(uuid)}
+                          onClick={() => handleEndCall(uuid)}
                           disabled={!uuid || endingUuid === uuid}
                           title={!uuid ? "Missing call UUID" : "End call"}
                         >
-                          {endingUuid === uuid ? "Ending..." : "🛑 End"}
+                          {endingUuid === uuid ? "Ending..." : "End"}
                         </button>
                       ) : (
                         <button className="btn btn-view" onClick={() => openCallModal(call)}>
-                          👁️ View
+                          View
                         </button>
                       )}
                     </td>
@@ -698,110 +580,147 @@ const formatFullAddress = (metadata = {}) => {
         )}
       </div>
 
-      {/* Results count */}
       <div className="results-footer">
         Showing {filteredCalls.length} of {calls.length} calls
         {searchTerm && ` matching "${searchTerm}"`}
       </div>
 
-      {/* Call Detail Modal */}
       {showCallModal && activeCall && (
-        <div
-          className="modal-overlay"
-          onClick={() => {
-            setShowCallModal(false);
-            setActiveCall(null);
-          }}
-        >
-          <div className="modal-content call-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay" onClick={closeCallModal}>
+          <div className="modal-content call-modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
-              <h2>📞 Call Details</h2>
-              <button
-                className="close-btn"
-                onClick={() => {
-                  setShowCallModal(false);
-                  setActiveCall(null);
-                }}
-              >
-                ✕
+              <h2>Call Details</h2>
+              <button className="close-btn" onClick={closeCallModal}>
+                x
               </button>
             </div>
 
             <div className="modal-body">
-              {/* Call Info */}
               <div className="call-info-section">
-                <div className="call-number-large">{formatPhone(activeCall.number)}</div>
+                {(() => {
+                  const contact = formatContactInfo(activeCall);
+                  return contact.hasName ? (
+                    <>
+                      <div
+                        className="call-customer-name"
+                        style={{ fontSize: "1.8rem", fontWeight: 700, marginBottom: "0.5rem" }}
+                      >
+                        {contact.name}
+                      </div>
+                      <div
+                        className="call-number-sub"
+                        style={{
+                          fontSize: "1.2rem",
+                          fontFamily: "monospace",
+                          color: "#94a3b8",
+                        }}
+                      >
+                        {formatPhone(activeCall.number || activeCall.to)}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div
+                        className="call-number-large"
+                        style={{ fontSize: "2rem", fontWeight: 700, fontFamily: "monospace" }}
+                      >
+                        {formatPhone(activeCall.number || activeCall.to)}
+                      </div>
+                      <div
+                        className="call-sub-label"
+                        style={{ color: "#64748b", marginTop: "4px", fontStyle: "italic" }}
+                      >
+                        {getCallType(activeCall) === "bulk"
+                          ? "Unknown Contact"
+                          : "Manual Dial"}
+                      </div>
+                    </>
+                  );
+                })()}
 
-                {/* Customer Name */}
-                {activeCall.metadata?.name && activeCall.metadata.name !== "Unknown" && (
-                  <div
-                    className="call-customer-name"
-                    style={{ marginBottom: "1.5rem", fontWeight: 600, fontSize: "1.1rem" }}
-                  >
-                    👤 {activeCall.metadata.name}
+                {activeCall.outcome && (
+                  <div style={{ marginTop: "1rem", marginBottom: "0.5rem" }}>
+                    <span
+                      style={{
+                        display: "inline-block",
+                        padding: "6px 12px",
+                        borderRadius: "20px",
+                        fontSize: "0.85rem",
+                        fontWeight: 600,
+                        background:
+                          activeCall.outcome === "interested"
+                            ? "rgba(16, 185, 129, 0.2)"
+                            : activeCall.outcome === "callback"
+                            ? "rgba(245, 158, 11, 0.2)"
+                            : "rgba(100, 116, 139, 0.2)",
+                        color:
+                          activeCall.outcome === "interested"
+                            ? "#6ee7b7"
+                            : activeCall.outcome === "callback"
+                            ? "#fcd34d"
+                            : "#94a3b8",
+                        border:
+                          activeCall.outcome === "interested"
+                            ? "1px solid rgba(16, 185, 129, 0.4)"
+                            : activeCall.outcome === "callback"
+                            ? "1px solid rgba(245, 158, 11, 0.4)"
+                            : "1px solid rgba(100, 116, 139, 0.4)",
+                      }}
+                    >
+                      Outcome: {activeCall.outcome.replace(/_/g, " ").toUpperCase()}
+                    </span>
                   </div>
                 )}
 
-                <div className="call-status-large">{getStatusBadge(activeCall.status)}</div>
+                <div style={{ marginTop: "1.5rem" }}>{getStatusBadge(activeCall.status)}</div>
 
-                {/* Call Meta Grid */}
-                <div className="call-meta-grid">
-                  {/* Contact Name (grid) */}
-                  {activeCall.metadata?.name && activeCall.metadata.name !== "Unknown" && (
+                <div className="call-meta-grid" style={{ marginTop: "2rem" }}>
+                  {formatContactInfo(activeCall).address && (
                     <div className="meta-item">
-                      <span className="meta-label">Contact Name</span>
-                      <span className="meta-value">{activeCall.metadata.name}</span>
+                      <span className="meta-label">Address</span>
+                      <span className="meta-value">
+                        {formatContactInfo(activeCall).address}
+                      </span>
                     </div>
                   )}
-
-                  {/* ✅ Address (grid) */}
-  {formatFullAddress(activeCall.metadata) && (
-    <div className="meta-item">
-      <span className="meta-label">Address</span>
-      <span className="meta-value">
-        📍 {formatFullAddress(activeCall.metadata)}
-      </span>
-    </div>
-  )}
-
-
                   <div className="meta-item">
                     <span className="meta-label">Duration</span>
-                    <span className="meta-value">{formatDuration(activeCall)}</span>
+                    <span className="meta-value">
+                      {formatDuration(activeCall, currentTime)}
+                    </span>
                   </div>
-
                   <div className="meta-item">
                     <span className="meta-label">Type</span>
-                    <span className="meta-value">{getTypeBadge(activeCall.type)}</span>
+                    <span className="meta-value">{getTypeBadge(getCallType(activeCall))}</span>
                   </div>
-
                   <div className="meta-item">
-                    <span className="meta-label">Started (Time)</span>
+                    <span className="meta-label">Started</span>
                     <span className="meta-value">{formatTime(activeCall.createdAt)}</span>
                   </div>
                 </div>
               </div>
 
-              {/* Notes Section */}
               <div className="notes-section">
-                <h3>📝 Call Notes</h3>
+                <h3>Call Notes</h3>
                 <textarea
                   placeholder="Add notes about this call..."
                   value={callNotes}
-                  onChange={(e) => setCallNotes(e.target.value)}
+                  onChange={(event) => setCallNotes(event.target.value)}
                   rows={4}
                 />
-
                 <div className="outcome-row">
                   <label>Outcome:</label>
-                  <select value={callOutcome} onChange={(e) => setCallOutcome(e.target.value)}>
+                  <select
+                    value={callOutcome}
+                    onChange={(event) => setCallOutcome(event.target.value)}
+                  >
                     <option value="">Select outcome...</option>
-                    <option value="interested">✅ Interested</option>
-                    <option value="not_interested">❌ Not Interested</option>
-                    <option value="callback">📞 Callback Requested</option>
-                    <option value="no_answer">📵 No Answer</option>
-                    <option value="voicemail">📬 Left Voicemail</option>
-                    <option value="wrong_number">🚫 Wrong Number</option>
+                    <option value="interested">Interested</option>
+                    <option value="not_interested">Not Interested</option>
+                    <option value="callback">Callback Requested</option>
+                    <option value="no_answer">No Answer</option>
+                    <option value="voicemail">Left Voicemail</option>
+                    <option value="wrong_number">Wrong Number</option>
                   </select>
                 </div>
               </div>
@@ -810,30 +729,27 @@ const formatFullAddress = (metadata = {}) => {
             <div className="modal-footer">
               <button
                 className="btn btn-secondary"
-                onClick={() => {
-                  setShowCallModal(false);
-                  setActiveCall(null);
-                }}
-                disabled={savingNotes || (endingUuid && endingUuid === activeCall.uuid)}
+                onClick={closeCallModal}
+                disabled={savingNotes || endingUuid === activeCall.uuid}
               >
                 Close
               </button>
 
               <button
                 className="btn btn-primary"
-                onClick={saveCallNotes}
-                disabled={!activeCall?.uuid || savingNotes}
+                onClick={handleSaveCallNotes}
+                disabled={!activeCall.uuid || savingNotes}
               >
-                {savingNotes ? "Saving..." : "💾 Save Notes"}
+                {savingNotes ? "Saving..." : "Save Notes"}
               </button>
 
-              {["dialing", "ringing", "answered", "initiated"].includes(activeCall.status) && (
+              {ACTIVE_STATUSES.includes(activeCall.status) && (
                 <button
                   className="btn btn-danger"
-                  onClick={() => endCall(activeCall.uuid)}
-                  disabled={!activeCall?.uuid || endingUuid === activeCall.uuid}
+                  onClick={() => handleEndCall(activeCall.uuid)}
+                  disabled={!activeCall.uuid || endingUuid === activeCall.uuid}
                 >
-                  {endingUuid === activeCall.uuid ? "Ending..." : "🛑 End Call"}
+                  {endingUuid === activeCall.uuid ? "Ending..." : "End Call"}
                 </button>
               )}
             </div>

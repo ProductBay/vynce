@@ -1,21 +1,36 @@
-// src/components/ProtectedRoute.jsx
-import React from 'react';
-import { Navigate } from 'react-router-dom';
-import { useAuth } from './AuthContext';
+import React from "react";
+import { Navigate, useLocation } from "react-router-dom";
+import { useAuth } from "./AuthContext";
 
-export default function ProtectedRoute({ children }) {
+export default function ProtectedRoute({
+  children,
+  requireAdmin = false,
+  loginPath = "/login",
+}) {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
-  // While auth state is loading, you can show a simple placeholder
   if (loading) {
-    return <div style={{ padding: 24 }}>Loading...</div>;
+    return <div style={{ padding: 24 }}>Loading auth...</div>;
   }
 
-  // If no user, redirect to login
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return (
+      <Navigate
+        to={loginPath}
+        replace
+        state={{ from: location.pathname }}
+      />
+    );
   }
 
-  // Otherwise, render the protected children
+  if (
+    requireAdmin &&
+    user.role !== "admin" &&
+    user.isSuperAdmin !== true
+  ) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
   return children;
 }

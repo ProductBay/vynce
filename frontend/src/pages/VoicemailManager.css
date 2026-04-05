@@ -20,6 +20,12 @@
   font-size: 1.5rem;
 }
 
+.active-voicemail-meta {
+  margin-top: 0.75rem;
+  color: #374151;
+  font-size: 0.95rem;
+}
+
 .status-badge {
   padding: 0.5rem 1rem;
   border-radius: 20px;
@@ -165,6 +171,11 @@
   position: relative;
 }
 
+.message-card.active-card {
+  border-color: #10b981;
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.12);
+}
+
 .message-card:hover {
   border-color: #3b82f6;
   transform: translateY(-2px);
@@ -225,6 +236,18 @@
   background: #f9fafb;
   border-radius: 6px;
   border: 1px dashed #d1d5db;
+}
+
+.message-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+  color: #374151;
+  font-size: 0.9rem;
 }
 
 /* No Messages State */

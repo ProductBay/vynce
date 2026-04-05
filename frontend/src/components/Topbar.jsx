@@ -1,16 +1,37 @@
-import React, { useRef, useState, useEffect, useCallback } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import "./Topbar.css";
 
 import API_BASE_URL from "../api";
 import ScriptsPanel from "./ScriptPanel";
 import DialPad from "./DialPad";
 import { useAuth } from "../components/AuthContext"; // keep if this path is correct for your project
+import { useAppContext } from "../contexts/AppContext";
+
+import { useLicenseGuard } from "../hooks/useLicenseGuard";
+import LicenseBanner from "../components/LicenseBanner";
+
+
+
+
 
 export default function Topbar({ onBulkCallStart }) {
+   const users = [];
   const fileInputRef = useRef(null);
 
   // ✅ ONE auth hook call ONLY
-  const { user, logout, loading, authFetch } = useAuth();
+ const { user, logout, loading, authFetch } = useAuth();
+ const {
+  calls: sharedCalls,
+  refreshCalls,
+  bulkStatus: sharedBulkStatus,
+  makeCall,
+  endCall,
+  saveCallNotes: saveSharedCallNotes,
+ } = useAppContext();
+
+ // ✅ SAFELY derive agents list (no crash if empty)
+const agents = [];
+
 
   // --- State hooks ---
   const [selectedFile, setSelectedFile] = useState(null);
@@ -31,21 +52,85 @@ export default function Topbar({ onBulkCallStart }) {
   const [usedCalls, setUsedCalls] = useState(0);
   const [currentTime, setCurrentTime] = useState(Date.now());
 
+  const isTestMode = false;
+  const [modeUpdating, setModeUpdating] = useState(false);
+  const [showLiveModeConfirm, setShowLiveModeConfirm] = useState(false);
+
+  const {
+    loading: licenseLoading,
+    canCall,
+    canSingleCall,
+    canBulkCall,
+    mode: systemMode,
+    reason,
+  } = useLicenseGuard();
+
+const [isBulkCampaignActive, setIsBulkCampaignActive] = useState(false);
+
+
+// CSV bulk confirmation modal
+const [showCsvModal, setShowCsvModal] = useState(false);
+const [pendingCsvFile, setPendingCsvFile] = useState(null);
+
+const [csvRowCount, setCsvRowCount] = useState(null);
+const [csvPreviewRows, setCsvPreviewRows] = useState([]);
+const [scheduleLater, setScheduleLater] = useState(false);
+const [scheduledAt, setScheduledAt] = useState("");
+
+const [campaignName, setCampaignName] = useState("");
+const [assignedAgentId, setAssignedAgentId] = useState("");
+
+const [onboarding, setOnboarding] = useState(null);
+const effectiveCanCall = canCall;
+const effectiveCanSingleCall = canSingleCall;
+const effectiveCanBulkCall = canBulkCall;
+// Add these state hooks
+// ✅ Consolidated State: One object to rule them all
+const [bulkStatus, setBulkStatus] = useState({ 
+  running: false, 
+  paused: false, 
+  campaignName: "" 
+});
+useEffect(() => {
+  if (!sharedBulkStatus) return;
+
+  const running = !!sharedBulkStatus.running;
+  const paused = !!sharedBulkStatus.paused;
+
+  setBulkStatus((prev) => ({
+    ...prev,
+    ...sharedBulkStatus,
+    running,
+    paused,
+  }));
+  setIsBulkCampaignActive(running || paused);
+}, [sharedBulkStatus]);
+useEffect(() => {
+  let mounted = true;
+
+  const loadOnboarding = async () => {
+    try {
+      const res = await authFetch("/api/onboarding/status");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (mounted) setOnboarding(data);
+    } catch {}
+  };
+
+  loadOnboarding();
+  return () => (mounted = false);
+}, [authFetch]);
+
+// 📦 OFFLINE MODE — no onboarding / test mode
+
+
+
   // ------------------------------------
   // Helpers
   // ------------------------------------
-  const safeCallsArray = (data) => {
-    const callsArray = Array.isArray(data?.calls)
-      ? data.calls
-      : Array.isArray(data)
-      ? data
-      : [];
-    return callsArray;
-  };
-
-  const handleCloseSingleCallModal = () => {
-    // Prevent closing while an API request is in-flight (optional but helps UX)
-    if (isLoading) return;
+const handleCloseSingleCallModal = () => {
+  // Prevent closing while an API request is in-flight (optional but helps UX)
+  if (isLoading) return;
 
     setSingleCallModal(false);
     setActiveCall(null);
@@ -56,425 +141,436 @@ export default function Topbar({ onBulkCallStart }) {
     setShowScripts(false);
   };
 
-  // ------------------------------------
-  // ✅ Usage: count calls for usage meter (AUTHED)
-  // ------------------------------------
-  const fetchUsage = useCallback(async () => {
-    try {
-      const res = await authFetch(`${API_BASE_URL}/api/calls`);
-      if (!res.ok) return;
+const handleCloseModal = () => {
+  setShowModal(false);
+  setCsvData([]);        // optional but recommended
+  setSelectedFile(null); // optional cleanup
+};
 
-      const data = await res.json().catch(() => ({}));
-      const callsArray = safeCallsArray(data);
-      setUsedCalls(callsArray.length);
-    } catch (err) {
-      console.error("Failed to fetch usage:", err);
-    }
-  }, [authFetch]);
+const handleToggleMode = async () => {
+  if (modeUpdating) return;
 
-  useEffect(() => {
-    fetchUsage();
-    const interval = setInterval(fetchUsage, 5000);
-    return () => clearInterval(interval);
-  }, [fetchUsage]);
+  const nextMode = systemMode?.requested === "live" ? "offline" : "live";
 
-  // ------------------------------------
-  // Live timer for active single call
-  // ------------------------------------
-  useEffect(() => {
-    if (!activeCall) return;
-    const interval = setInterval(() => setCurrentTime(Date.now()), 1000);
-    return () => clearInterval(interval);
-  }, [activeCall]);
-
-  // ------------------------------------
-  // ✅ Poll active call status while modal is open (AUTHED)
-  // ------------------------------------
-  const pollActiveCall = useCallback(async () => {
-    try {
-      const res = await authFetch(`${API_BASE_URL}/api/calls`);
-      if (!res.ok) return;
-
-      const data = await res.json().catch(() => ({}));
-      const callsArray = safeCallsArray(data);
-      const updated = callsArray.find((c) => c.uuid === activeCall?.uuid);
-      if (updated) setActiveCall(updated);
-    } catch (err) {
-      console.error("Failed to refresh active call:", err);
-    }
-  }, [authFetch, activeCall?.uuid]);
-
-  useEffect(() => {
-    if (!activeCall || !singleCallModal) return;
-
-    pollActiveCall();
-    const interval = setInterval(pollActiveCall, 2000);
-
-    return () => clearInterval(interval);
-  }, [activeCall, singleCallModal, pollActiveCall]);
-
-  // --- Early exit for loading (NO hooks after this) ---
-  if (loading) {
-    return (
-      <header className="topbar">
-        <h1>Vynce Dashboard</h1>
-      </header>
-    );
+  if (nextMode === "live") {
+    setShowLiveModeConfirm(true);
+    return;
   }
 
-  // ------------------------------------
-  // CSV Handling (FIXED)
-  // ------------------------------------
-  const handleUploadClick = () => {
-    fileInputRef.current?.click();
+  await performModeSwitch(nextMode);
+};
+
+const performModeSwitch = async (nextMode) => {
+  if (modeUpdating) return;
+
+  setModeUpdating(true);
+  try {
+    const res = await authFetch("/api/system/mode", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: nextMode }),
+    });
+
+    if (!res.ok) {
+      throw new Error("Failed to update mode");
+    }
+
+    window.location.reload();
+  } catch {
+    // keep quiet for now
+  } finally {
+    setModeUpdating(false);
+  }
+};
+
+ // ------------------------------------
+// ✅ ENHANCED: Fetch calls + subscription limits
+// ------------------------------------
+useEffect(() => {
+  setUsedCalls(sharedCalls.length);
+}, [sharedCalls]);
+
+
+
+  useEffect(() => {
+  if (!user || loading) return;
+
+  let alive = true;
+
+  const sync = async () => {
+    try {
+      const res = await authFetch("/api/bulk/status");
+      if (!res.ok) return;
+      const data = await res.json();
+
+      if (!alive) return;
+
+      const running = !!data?.running;
+      const paused = !!data?.paused;
+
+      setBulkStatus((prev) => ({ ...prev, running, paused }));
+      setIsBulkCampaignActive(running || paused);
+    } catch {
+      // silent
+    }
   };
 
-  // Normalize headers like:
-  // "Phone Number", "phone_number", "MOBILE #" -> "phone number", "phone number", "mobile number"
-  const normalizeHeader = (h = "") =>
-    h
-      .toString()
-      .toLowerCase()
-      .trim()
-      .replace(/[_\-]+/g, " ")
-      .replace(/\s+/g, " ")
-      .replace(/#/g, "number");
+  sync();
+  const t = setInterval(sync, 10000);
 
-  // Normalize NANP numbers to +1XXXXXXXXXX; return "" if invalid
-  const normalizePhone = (value) => {
-    if (!value) return "";
-    let num = value.toString().replace(/\D/g, "").replace(/^0+/, "");
-    if (num.length === 10) num = "1" + num;
-    if (num.length === 11 && num.startsWith("1")) return `+${num}`;
-    return "";
+  return () => {
+    alive = false;
+    clearInterval(t);
   };
+}, [user, loading, authFetch]);
 
-  // Safer CSV parse: detects phone column, normalizes phone, keeps rawData for preview
-  const parseCSV = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
 
-      reader.onload = (e) => {
-        try {
-          const text = String(e.target.result || "");
-          const lines = text
-            .split(/\r?\n/)
-            .map((l) => l.trim())
-            .filter(Boolean);
 
-          if (lines.length === 0) {
-            reject(new Error("CSV file is empty"));
-            return;
+
+useEffect(() => {
+  if (!activeCall) return;
+
+  const activeCallKey = activeCall.uuid || activeCall._id;
+  if (!activeCallKey) return;
+
+  const nextActiveCall = sharedCalls.find((call) => {
+    const callKey = call?.uuid || call?._id;
+    return callKey === activeCallKey;
+  });
+
+  if (nextActiveCall) {
+    setActiveCall((prev) => ({ ...prev, ...nextActiveCall }));
+  }
+}, [activeCall, sharedCalls]);
+
+// ------------------------------------
+// REMOVED: All other socket useEffects (consolidated above)
+// REMOVED: The duplicate "LIVE CALL UPDATES" block entirely
+// REMOVED: The broken useEffect after the loading check
+
+// ------------------------------------
+// CSV Handling (FIXED)
+// ------------------------------------
+const handleUploadClick = () => {
+  fileInputRef.current?.click();
+};
+
+const normalizeHeader = (h = "") =>
+  h
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/[_\-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/#/g, "number");
+
+const normalizePhone = (value) => {
+  if (!value) return "";
+  let num = value.toString().replace(/\D/g, "").replace(/^0+/, "");
+  if (num.length === 10) num = "1" + num;
+  if (num.length === 11 && num.startsWith("1")) return `+${num}`;
+  return "";
+};
+
+const parseCSV = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        const text = String(e.target.result || "");
+        const lines = text
+          .split(/\r?\n|\r/)
+          .map(line => line.trim())
+          .filter(Boolean);
+
+        if (lines.length < 2) {
+          reject(new Error("CSV must have at least one data row"));
+          return;
+        }
+
+        // Parse headers
+        const headerLine = lines[0];
+        const headers = [];
+        let current = "";
+        let inQuotes = false;
+
+        for (let i = 0; i < headerLine.length; i++) {
+          const char = headerLine[i];
+          if (char === '"') {
+            inQuotes = !inQuotes;
+          } else if (char === ',' && !inQuotes) {
+            headers.push(current.trim());
+            current = "";
+          } else {
+            current += char;
           }
+        }
+        headers.push(current.trim());
 
-          // Parse headers (basic CSV split for your current format)
-          const rawHeaders = lines[0]
-            .split(",")
-            .map((h) => h.trim().replace(/"/g, ""));
+        // Find phone column
+        const phoneIndex = headers.findIndex(h => 
+          normalizeHeader(h).includes('phone') || 
+          normalizeHeader(h).includes('number') ||
+          h.toLowerCase() === 'to'
+        );
 
-          const headers = rawHeaders.map(normalizeHeader);
+        if (phoneIndex === -1) {
+          reject(new Error("No phone column found. Please include 'Phone' or 'Number' column."));
+          return;
+        }
 
-          // Find phone column by normalized header
-          const phoneIndex = headers.findIndex(
-            (h) =>
-              h.includes("phone") ||
-              h.includes("mobile") ||
-              h.includes("number") ||
-              h.includes("tel") ||
-              h === "to"
-          );
+        const data = [];
+        const processedNumbers = new Set(); // Prevent duplicates
 
-          if (phoneIndex === -1) {
-            reject(
-              new Error(
-                "No phone column detected. Please include a column like Phone, Phone Number, Mobile, Number, or Tel."
-              )
-            );
-            return;
-          }
+        for (let i = 1; i < lines.length; i++) {
+          if (!lines[i].trim()) continue;
 
-          // Find possible name column
-          const nameIndex = headers.findIndex(
-            (h) => h.includes("name") || h.includes("full name") || h.includes("fullname") || h.includes("contact")
-          );
+          const values = [];
+          current = "";
+          inQuotes = false;
 
-          const data = [];
-
-          lines.slice(1).forEach((line, index) => {
-            // Robust-ish CSV row split (supports commas inside quotes)
-            const values = [];
-            let current = "";
-            let inQuotes = false;
-
-            for (let i = 0; i < line.length; i++) {
-              const char = line[i];
-              if (char === '"') {
-                inQuotes = !inQuotes;
-              } else if (char === "," && !inQuotes) {
-                values.push(current);
-                current = "";
-              } else {
-                current += char;
-              }
+          for (let j = 0; j < lines[i].length; j++) {
+            const char = lines[i][j];
+            if (char === '"') {
+              inQuotes = !inQuotes;
+            } else if (char === ',' && !inQuotes) {
+              values.push(current);
+              current = "";
+            } else {
+              current += char;
             }
-            values.push(current);
+          }
+          values.push(current);
 
-            // Build normalized-key row map for preview/metadata
-            const row = {};
-            headers.forEach((h, i) => {
-              row[h] = String(values[i] || "").replace(/"/g, "").trim();
-            });
+          // Extract phone number
+          const rawPhone = values[phoneIndex]?.trim().replace(/["']/g, '') || '';
+          const normalizedPhone = normalizePhone(rawPhone);
+          
+          if (!normalizedPhone) continue;
+          if (processedNumbers.has(normalizedPhone)) continue;
+          
+          processedNumbers.add(normalizedPhone);
 
-            const normalized = normalizePhone(values[phoneIndex]);
-            if (!normalized) return;
+          // Build rowData object
+          const rowData = {
+            id: data.length,
+            phone: normalizedPhone,
+            rawData: {}
+          };
 
-            // Location fields (optional, safe)
-            const city = row.city || row.town || "";
-            const state = row.state || row.region || "";
-            const zip = row.zip || row.zipcode || row.postalcode || "";
-
-            const name =
-              (nameIndex !== -1 ? String(values[nameIndex] || "").replace(/"/g, "").trim() : "") ||
-              row.name ||
-              row.fullname ||
-              `Contact ${index + 1}`;
-
-            data.push({
-              id: index,
-              phone: normalized,
-              name,
-              city,
-              state,
-              zip,
-              rawData: {
-                ...row,
-                phone: normalized,
-                name,
-                city,
-                state,
-                zip,
-              },
-            });
+          // Populate all columns
+          headers.forEach((header, idx) => {
+            if (idx < values.length) {
+              rowData.rawData[normalizeHeader(header)] = values[idx].replace(/["']/g, '').trim();
+            }
           });
 
-          if (data.length === 0) {
-            reject(
-              new Error(
-                "No valid phone numbers found in CSV. Please ensure your CSV has a column with phone numbers."
-              )
-            );
-            return;
-          }
-
-          resolve(data);
-        } catch (error) {
-          reject(error);
+          data.push(rowData);
         }
-      };
 
-      reader.onerror = () => reject(new Error("Failed to read file"));
-      reader.readAsText(file);
+        if (data.length === 0) {
+          reject(new Error("No valid phone numbers found in CSV"));
+          return;
+        }
+
+        resolve(data);
+
+      } catch (err) {
+        reject(new Error(`Invalid CSV format: ${err.message}`));
+      }
+    };
+
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsText(file);
+  });
+};
+
+const handleFileChange = async (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  setSelectedFile(file);
+  setIsLoading(true);
+
+  try {
+    const parsedData = await parseCSV(file);
+    setCsvData(parsedData);
+    setShowModal(true);
+  } catch (error) {
+    alert(error.message);
+  } finally {
+    setIsLoading(false);
+    event.target.value = "";
+  }
+};
+
+const handleRunNow = async () => {
+  if (licenseLoading) {
+    alert("Checking license, please wait…");
+    return;
+  }
+
+  if (!effectiveCanBulkCall) {
+    alert(reason || "You cannot make calls right now");
+    return;
+  }
+
+  setIsLoading(true);
+
+  try {
+    const formData = new FormData();
+    
+    // Create clean CSV content
+    const csvRows = [
+      "phone,name,city,state,zip",
+      ...csvData.map((r) => {
+        const phone = r.phone.replace(/\D/g, '');
+        const name = r.rawData.name?.replace(/"/g, '""') || '';
+        const city = r.rawData.city?.replace(/"/g, '""') || '';
+        const state = r.rawData.state?.replace(/"/g, '""') || '';
+        const zip = r.rawData.zip?.replace(/"/g, '""') || '';
+        
+        return `"${phone}","${name}","${city}","${state}","${zip}"`;
+      })
+    ];
+
+    const blob = new Blob([csvRows.join("\n")], { type: "text/csv" });
+    formData.append("file", blob, selectedFile?.name || "contacts.csv");
+
+    // Add metadata
+    formData.append("campaignName", campaignName || "Unnamed Campaign");
+    formData.append("assignedAgentId", user?._id || "");
+
+    const res = await authFetch("/api/upload-csv", {
+      method: "POST",
+      body: formData,
+      // DO NOT set Content-Type - let browser set it with boundary
     });
-  };
 
-  const handleFileChange = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+    const result = await res.json();
 
-    if (!file.name.toLowerCase().endsWith(".csv")) {
-      alert("Please select a CSV file");
-      event.target.value = "";
-      return;
+    if (!res.ok) {
+      throw new Error(result?.message || `Upload failed (${res.status})`);
     }
 
-    setSelectedFile(file);
-    setIsLoading(true);
+    const count = result?.queued ?? result?.count ?? 0;
+    await refreshCalls();
+    alert(`✅ Started bulk campaign with ${count} calls!`);
 
-    try {
-      const parsedData = await parseCSV(file);
-      setCsvData(parsedData);
-      setShowModal(true);
-    } catch (error) {
-      console.error("Error parsing CSV:", error);
-      alert(`Error parsing CSV file: ${error.message}`);
-    } finally {
-      setIsLoading(false);
-      event.target.value = "";
-    }
-  };
-
-  const handleSchedule = () => {
-    alert("Scheduling feature coming soon! The calls will be scheduled for later execution.");
-  };
-
-  const handleCloseModal = () => {
     setShowModal(false);
-    setSelectedFile(null);
     setCsvData([]);
-  };
+    setSelectedFile(null);
+    setCampaignName("");
 
-  // ✅ Bulk calls: upload CSV to backend (AUTHED) (FIXED)
-  // Always sends a clean, backend-friendly CSV with guaranteed headers.
-  const handleRunNow = async () => {
-    if (!csvData.length || isLoading) return;
+  } catch (err) {
+    console.error("❌ Bulk upload error:", err);
+    alert(`Failed to start bulk campaign: ${err.message}`);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
-    setIsLoading(true);
-    try {
-      const formData = new FormData();
+// 📅 Placeholder – REQUIRED so JSX does not crash
+const handleSchedule = () => {
+  alert("📅 Scheduling coming soon");
+};
 
-      // Always build a clean CSV for upload (prevents backend header mismatch)
-      const headers = ["phone", "name", "city", "state", "zip"];
-      const csvRows = [
-        headers.join(","),
-        ...csvData.map((r) =>
-          headers
-            .map((h) => {
-              const val = r?.rawData?.[h] ?? r?.[h] ?? "";
-              return `"${String(val).replace(/"/g, '""')}"`;
-            })
-            .join(",")
-        ),
-      ];
 
-      const blob = new Blob([csvRows.join("\n")], { type: "text/csv" });
-      formData.append("file", blob, selectedFile?.name || "contacts.csv");
+/* ===============================
+   🔥 BULK CONTROL UI (FINAL)
+   =============================== */
 
-      const res = await authFetch(`${API_BASE_URL}/api/upload-csv`, {
-        method: "POST",
-        body: formData,
-        // IMPORTANT: do NOT set Content-Type for FormData
-      });
 
-      if (!res.ok) {
-        const errorText = await res.text().catch(() => "");
-        throw new Error(
-          `Server returned ${res.status}: ${res.statusText}${errorText ? ` - ${errorText}` : ""}`
-        );
-      }
 
-      const result = await res.json().catch(() => ({}));
 
-      if (onBulkCallStart) onBulkCallStart(result);
 
-      alert(`✅ Successfully started bulk calls for ${result.count || csvData.length} numbers`);
+// ------------------------------------
+// Single call handling (AUTHED)
+// ------------------------------------
+const makeSingleCall = async (number) => {
+  if (!number) {
+    console.error("❌ No number provided");
+    return;
+  }
 
-      setShowModal(false);
-      setSelectedFile(null);
-      setCsvData([]);
-    } catch (error) {
-      console.error("❌ Error starting bulk calls:", error);
-      alert(`❌ Error starting bulk calls: ${error.message}`);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  setIsLoading(true);
 
-  // ------------------------------------
-  // Single call handling (AUTHED)
-  // ------------------------------------
-  const handleSingleCallClick = () => {
-    // Reset call state for a fresh dial
-    setSingleCallNumber("");
-    setActiveCall(null);
-    setCallNotes("");
-    setCallOutcome("");
-    setSelectedScript(null);
-    setShowScripts(false);
+  try {
+    const agentName = `${user?.firstName || ""} ${user?.lastName || ""}`.trim();
+    const result = await makeCall({
+      to: number,
+      agent: agentName,
+    });
 
-    // Open modal
-    setSingleCallModal(true);
-  };
+    setActiveCall(result?.call || result?.data || null);
 
-  const makeSingleCall = async (number) => {
-    if (!number || isLoading) return;
+  } catch (error) {
+    console.error("❌ makeSingleCall ERROR:", error);
+    console.error("❌ Error stack:", error.stack);
+    alert(`❌ Error making call: ${error.message}`);
+    setActiveCall(null); // Don't show fake active call
+  } finally {
+    setIsLoading(false);
+  }
+};
 
-    setIsLoading(true);
-    try {
-      const agentName = `${user?.firstName || ""} ${user?.lastName || ""}`.trim();
 
-      const res = await authFetch(`${API_BASE_URL}/api/make-call`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          to: number,
-          agent: agentName,
-          callerID: user?.callerId || "",
-        }),
-      });
+// ------------------------------------
+// End active single call (AUTHED)
+// ------------------------------------
+const endSingleCall = async () => {
+  if (!activeCall || isLoading) return;
 
-      const result = await res.json().catch(() => ({}));
+  setIsLoading(true);
 
-      if (!res.ok || !result.success) {
-        throw new Error(result.message || `Server returned ${res.status}`);
-      }
+  try {
+    const data = await endCall(activeCall.uuid);
+    alert(data.message || "Call ended");
+    handleCloseSingleCallModal();
+  } catch (error) {
+    console.error("❌ Error ending call:", error);
+    alert(`❌ Error ending call: ${error.message}`);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
-      setActiveCall(result.data || null);
-      setSingleCallModal(true);
-    } catch (error) {
-      console.error("❌ Error making single call:", error);
-      alert(`❌ Error making call: ${error.message}`);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+// ------------------------------------
+// Save call notes (AUTHED)
+// ------------------------------------
+// In Topbar.jsx
+const saveCallNotes = async () => {
+  if (!activeCall?.uuid || isLoading) return;
 
-  const endSingleCall = async () => {
-    if (!activeCall || isLoading) return;
+  setIsLoading(true);
+  try {
+    await saveSharedCallNotes({
+      uuid: activeCall.uuid,
+      content: callNotes,
+      outcome: callOutcome,
+    });
 
-    setIsLoading(true);
-    try {
-      const res = await authFetch(`${API_BASE_URL}/api/end-call`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uuid: activeCall.uuid }),
-      });
+    alert("✅ Notes saved!");
+    // No need to close the modal, agent might want to keep it open
+  } catch (error) {
+    console.error("❌ Error saving notes:", error);
+    alert(`Failed to save notes: ${error.message}`);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
-      const result = await res.json().catch(() => ({}));
-
-      if (!res.ok || !result.success) {
-        throw new Error(result.message || `Server returned ${res.status}`);
-      }
-
-      alert(`✅ ${result.message || "Call ended"}`);
-      handleCloseSingleCallModal();
-    } catch (error) {
-      console.error("❌ Error ending call:", error);
-      alert(`❌ Error ending call: ${error.message}`);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const saveCallNotes = async () => {
-    if (!activeCall || isLoading) return;
-
-    setIsLoading(true);
-    try {
-      const res = await authFetch(`${API_BASE_URL}/api/calls/${activeCall.uuid}/notes`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content: callNotes,
-          scriptUsed: selectedScript?.name || "",
-          outcome: callOutcome,
-          followUpRequired: callOutcome === "callback",
-        }),
-      });
-
-      const result = await res.json().catch(() => ({}));
-
-      if (!res.ok || !result.success) {
-        throw new Error(result.message || `Server returned ${res.status}`);
-      }
-
-      alert("✅ Call notes saved successfully!");
-    } catch (error) {
-      console.error("❌ Error saving notes:", error);
-      alert(`❌ Error saving notes: ${error.message}`);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+const handleSingleCallClick = () => {
+  // Reset call state for a fresh dial
+  setSingleCallNumber("");
+  setActiveCall(null);
+  setCallNotes("");
+  setCallOutcome("");
+  setSelectedScript(null);
+  setShowScripts(false);
+  setSingleCallModal(true);
+};
 
   // ------------------------------------
   // Utilities (UI)
@@ -556,108 +652,523 @@ export default function Topbar({ onBulkCallStart }) {
     makeSingleCall(singleCallNumber);
   };
 
-  // ------------------------------------
-  // JSX
-  // ------------------------------------
   return (
-    <>
-      <header className="topbar">
-        <h1>Vynce Dashboard</h1>
+  <>
+    <header className="topbar">
+      <h1>Ring-D-Skull</h1>
 
-        <div className="topbar-actions">
-          {/* Usage indicator */}
-          {user?.subscription && (
-            <div className="usage-indicator">
-              <span className="usage-text">
-                {usedCalls} / {user.subscription.maxCalls} calls
+      <div className="topbar-actions">
+        {/* ✅ ENHANCED USAGE METER */}
+        {user?.subscription && (
+          <div
+            className="usage-indicator"
+            title={
+              user.subscription.unlimitedCalls || !user.subscription.maxCalls
+                ? `Used ${usedCalls} calls`
+                : `Used ${usedCalls} of ${user.subscription.maxCalls} calls`
+            }
+          >
+            <div className="usage-header">
+              <span className="usage-label">Call Usage</span>
+              <span className="usage-percent">
+                {user.subscription.unlimitedCalls || !user.subscription.maxCalls
+                  ? "Unlimited"
+                  : user.subscription.maxCalls
+                  ? Math.min(100, Math.round((usedCalls / user.subscription.maxCalls) * 100))
+                  : 0}
+                {user.subscription.unlimitedCalls || !user.subscription.maxCalls ? "" : "%"}
               </span>
-              <div className="usage-bar">
-                <div
-                  className="usage-progress"
-                  style={{
-                    width: `${
-                      user.subscription.maxCalls
-                        ? Math.min(100, (usedCalls / user.subscription.maxCalls) * 100)
-                        : 0
-                    }%`,
-                  }}
-                ></div>
-              </div>
             </div>
-          )}
+            <div className="usage-bar-container">
+              <div
+                className="usage-bar"
+                style={{
+                  width: `${user.subscription.unlimitedCalls || !user.subscription.maxCalls
+                    ? 100
+                    : user.subscription.maxCalls
+                    ? Math.min(100, (usedCalls / user.subscription.maxCalls) * 100)
+                    : 0}%`,
+                  backgroundColor: `${
+                    user.subscription.unlimitedCalls || !user.subscription.maxCalls
+                      ? "#10b981"
+                      : (usedCalls / (user.subscription.maxCalls || Infinity)) > 0.9
+                      ? "#ef4444"  // Red if >90%
+                      : (usedCalls / (user.subscription.maxCalls || Infinity)) > 0.7
+                      ? "#f97316"  // Orange if >70%
+                      : "#10b981"   // Green otherwise
+                  }`
+                }}
+              ></div>
+            </div>
+            <div className="usage-text">
+              <span className="usage-used">{usedCalls}</span>
+              <span className="usage-divider">/</span>
+              <span className="usage-max">
+                {user.subscription.unlimitedCalls || !user.subscription.maxCalls
+                  ? "Unlimited"
+                  : user.subscription.maxCalls}
+              </span>
+              <span className="usage-unit">calls</span>
+            </div>
+          </div>
+        )}
 
-          {/* New Call */}
-          <button className="new-call-btn" onClick={handleSingleCallClick} disabled={isLoading}>
-            <span className="new-call-icon">📞</span>
-            <span>New Call</span>
-          </button>
+        {/* ⚠️ WARNING WHEN NEAR LIMIT */}
+        {!user?.subscription?.unlimitedCalls &&
+          user?.subscription?.maxCalls &&
+          usedCalls > user.subscription.maxCalls * 0.9 && (
+          <div className="usage-warning">
+            ⚠️ You've used {Math.round((usedCalls / user.subscription.maxCalls) * 100)}% of your call limit.
+          </div>
+        )}
 
-          {/* CSV Upload */}
-          <button className="csv-upload-btn" onClick={handleUploadClick} disabled={isLoading}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
-            </svg>
-            {isLoading ? "Processing..." : "Upload CSV"}
-          </button>
+        {systemMode ? (
+          <div className={`mode-indicator ${systemMode.effective === "live" ? "live" : "offline"}`}>
+            <div className="mode-copy">
+              <span className="mode-pill">
+                {systemMode.effective === "live" ? "Live Mode" : "Offline Mode"}
+              </span>
+              <span className="mode-subtext">
+                {systemMode.effective === "live"
+                  ? "Real provider traffic is enabled"
+                  : "Calls stay simulated in this workspace"}
+              </span>
+            </div>
+            <button
+              type="button"
+              className="mode-toggle-btn"
+              onClick={handleToggleMode}
+              disabled={modeUpdating}
+              title={
+                systemMode.reason ||
+                `Switch to ${systemMode.requested === "live" ? "offline" : "live"} mode`
+              }
+            >
+              {modeUpdating
+                ? "Switching..."
+                : systemMode.requested === "live"
+                  ? "Go Offline"
+                  : "Go Live"}
+            </button>
+          </div>
+        ) : null}
+
+        {/* New Call */}
+        <button
+          className="new-call-btn"
+          onClick={handleSingleCallClick}
+          disabled={isLoading || !effectiveCanSingleCall}
+          title={!effectiveCanSingleCall ? reason || "Single calling is unavailable" : ""}
+        >
+          <span className="new-call-icon">📞</span>
+          <span>New Call</span>
+        </button>
+
+        
 
           {/* Test Connection */}
-          <button className="test-connection-btn" onClick={testServerConnection} disabled={isLoading}>
+          <button className="test-connection-btn" onClick={testServerConnection} disabled={isLoading || !effectiveCanCall}
+>
             Test Connection
           </button>
+{/* Hidden file input — SELECT ONLY (NO UPLOAD HERE) */}
+<input
+  type="file"
+  ref={fileInputRef}
+  accept=".csv"
+  style={{ display: "none" }}
+  onChange={(e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-          {/* Hidden file input */}
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            accept=".csv"
-            style={{ display: "none" }}
-          />
+    setPendingCsvFile(file);
 
-          {/* User menu */}
-          <div className="user-menu-container">
-            <button className="user-menu-btn" onClick={() => setShowUserMenu(!showUserMenu)}>
-              <div className="user-avatar">
-                {user?.firstName?.charAt(0)}
-                {user?.lastName?.charAt(0)}
-              </div>
-              <span>
-                {user?.firstName} {user?.lastName}
-              </span>
-              <span className="dropdown-arrow">▾</span>
-            </button>
+    const reader = new FileReader();
 
-            {showUserMenu && (
-              <div className="user-dropdown">
-                <div className="user-info">
-                  <div className="user-name">
-                    {user?.firstName} {user?.lastName}
-                  </div>
-                  <div className="user-email">{user?.email}</div>
-                  <div className="user-plan">
-                    Plan: <span className="plan-badge">{user?.subscription?.plan}</span>
-                  </div>
+    reader.onload = () => {
+      const text = reader.result;
+      if (!text || typeof text !== "string") {
+        setCsvRowCount(0);
+        setCsvPreviewRows([]);
+        setShowCsvModal(true);
+        return;
+      }
+
+      // Normalize line endings & remove empty rows
+      const rows = text
+        .split(/\r?\n/)
+        .map((r) => r.trim())
+        .filter(Boolean);
+
+      if (rows.length <= 1) {
+        setCsvRowCount(0);
+        setCsvPreviewRows([]);
+        setShowCsvModal(true);
+        return;
+      }
+
+      // Header + data rows
+      const headers = rows[0].split(",").map((h) => h.trim());
+      const dataRows = rows.slice(1);
+
+      // Row count (excluding header)
+      setCsvRowCount(dataRows.length);
+
+      // Preview first 5 rows (non-destructive)
+      const preview = dataRows.slice(0, 5).map((line) => {
+        const cols = line.split(",");
+        return headers.reduce((acc, h, i) => {
+          acc[h] = cols[i] || "";
+          return acc;
+        }, {});
+      });
+
+      setCsvPreviewRows(preview);
+      setShowCsvModal(true);
+    };
+
+    reader.onerror = () => {
+      setCsvRowCount(0);
+      setCsvPreviewRows([]);
+      setShowCsvModal(true);
+    };
+
+    reader.readAsText(file);
+
+    // reset input so same file can be selected again
+    e.target.value = "";
+  }}
+/>
+
+
+{/* ✅ NEW RELIABLE BULK CONTROLS - This block will not crash */}
+{/* It only shows up if a campaign is actually running */}
+{bulkStatus.running && (
+  <div className="bulk-controls">
+    {/* Status Label */}
+    <span className="bulk-status">
+      Campaign: {bulkStatus.paused ? "Paused" : "Running"}
+    </span>
+
+    {/* Pause / Resume Button (Toggles based on state) */}
+    {bulkStatus.paused ? (
+      // Show RESUME button if paused
+      <button
+        type="button"
+        className="bulk-btn resume"
+        onClick={() => authFetch("/api/bulk/resume", { method: "POST" })}
+        title="Resume the bulk campaign"
+      >
+        ▶ Resume
+      </button>
+    ) : (
+      // Show PAUSE button if running
+      <button
+        type="button"
+        className="bulk-btn pause"
+        onClick={() => authFetch("/api/bulk/pause", { method: "POST" })}
+        title="Pause the bulk campaign"
+      >
+        ⏸ Pause
+      </button>
+    )}
+
+    {/* Stop Button (Always visible during a campaign) */}
+    <button
+      type="button"
+      className="bulk-btn stop"
+      onClick={() => {
+        if (window.confirm("Are you sure you want to stop this campaign? This action cannot be undone.")) {
+          authFetch("/api/bulk/stop", { method: "POST" });
+        }
+      }}
+      title="Permanently stop the campaign"
+    >
+      ⛔ Stop
+    </button>
+  </div>
+)}
+
+{/* The "Upload CSV" button should live outside the bulk-controls div,
+    so you can always start a new campaign. */}
+<button
+  type="button"
+  className="csv-upload-btn"
+  disabled={isLoading || !effectiveCanBulkCall || bulkStatus.running} // Also disable if a campaign is already running
+  aria-disabled={isLoading || !effectiveCanBulkCall || bulkStatus.running}
+  title={!effectiveCanBulkCall ? reason || "Bulk calling is unavailable" : bulkStatus.running ? "A campaign is already in progress" : "Upload a new contact list"}
+  onClick={() => fileInputRef.current?.click()}
+>
+  Upload CSV
+</button>
+{/* CSV CONFIRMATION MODAL */}
+{showCsvModal && (
+  <div className="csv-confirm-modal">
+    <div className="modal-content">
+      <h3>Run Bulk Campaign</h3>
+
+      {/* CAMPAIGN NAME */}
+      <div style={{ marginBottom: "10px" }}>
+        <label style={{ fontSize: "13px", opacity: 0.8 }}>
+          Campaign Name
+        </label>
+        <input
+          type="text"
+          placeholder="e.g. January Follow-ups"
+          value={campaignName}
+          onChange={(e) => setCampaignName(e.target.value)}
+          style={{
+            width: "100%",
+            padding: "8px",
+            marginTop: "4px",
+            borderRadius: "6px",
+          }}
+        />
+      </div>
+
+      {/* AGENT ASSIGNMENT */}
+      <div style={{ marginBottom: "10px" }}>
+        <label style={{ fontSize: "13px", opacity: 0.8 }}>
+          Assign Agent (optional)
+        </label>
+        <select
+  value={assignedAgentId}
+  onChange={(e) => setAssignedAgentId(e.target.value)}
+>
+  <option value="">— Unassigned / Auto —</option>
+
+  {agents.length === 0 && (
+    <option value="" disabled>
+      No agents available
+    </option>
+  )}
+
+  {agents.map((agent) => (
+    <option key={agent._id} value={agent._id}>
+      {agent.firstName} {agent.lastName}
+    </option>
+  ))}
+</select>
+
+
+      </div>
+
+      {/* FILE INFO */}
+      <p>
+        File:
+        <br />
+        <strong>{pendingCsvFile?.name}</strong>
+      </p>
+
+      {/* ROW COUNT */}
+      {csvRowCount !== null && (
+        <p>📊 <strong>{csvRowCount}</strong> numbers detected</p>
+      )}
+
+      {/* PREVIEW ROWS */}
+      {csvPreviewRows.length > 0 && (
+        <div
+          style={{
+            marginTop: "12px",
+            padding: "10px",
+            background: "#020617",
+            borderRadius: "8px",
+            fontSize: "13px",
+            maxHeight: "160px",
+            overflowY: "auto",
+          }}
+        >
+          <strong style={{ display: "block", marginBottom: "6px" }}>
+            Preview (first {csvPreviewRows.length} rows)
+          </strong>
+
+          {csvPreviewRows.map((row, idx) => (
+            <div
+              key={idx}
+              style={{
+                padding: "6px 0",
+                borderBottom: "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              {Object.entries(row).map(([key, value]) => (
+                <div key={key}>
+                  <span style={{ opacity: 0.6 }}>{key}:</span>{" "}
+                  <strong>
+                    {key.toLowerCase().includes("number")
+                      ? value?.replace(/\d(?=\d{4})/g, "•")
+                      : value}
+                  </strong>
                 </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
 
-                <div className="dropdown-divider"></div>
-                <a href="/billing" className="dropdown-item">
-                  💳 Billing &amp; Plans
-                </a>
-                <a href="/settings" className="dropdown-item">
-                  ⚙️ Settings
-                </a>
-                <div className="dropdown-divider"></div>
-                <button className="dropdown-item logout-btn" onClick={logout}>
-                  🚪 Sign Out
-                </button>
-              </div>
-            )}
-          </div>
+      {/* ACTIONS */}
+      <div className="modal-actions" style={{ marginTop: "14px" }}>
+        <button
+          className="btn cancel"
+          onClick={() => {
+            setCampaignName("");
+            setAssignedAgentId("");
+            setPendingCsvFile(null);
+            setCsvRowCount(null);
+            setCsvPreviewRows([]);
+            setShowCsvModal(false);
+          }}
+        >
+          Cancel
+        </button>
+
+        <button
+  className="btn confirm"
+  disabled={isLoading || !effectiveCanBulkCall || !campaignName.trim()}
+  onClick={async () => {
+    if (!pendingCsvFile) {
+      alert("No CSV file selected");
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", pendingCsvFile);
+      formData.append("campaignName", campaignName.trim());
+
+      formData.append("campaignName", campaignName.trim());
+    if (assignedAgentId) {
+      formData.append("assignedAgentId", assignedAgentId);
+    }
+
+      const res = await authFetch("/api/upload-csv", {
+        method: "POST",
+        body: formData,
+      });
+
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {
+        // backend may return empty body
+      }
+
+      if (!res.ok) {
+        throw new Error(
+          data?.message || `Upload failed (${res.status})`
+        );
+      }
+
+      // ✅ Success
+      await refreshCalls();
+      setShowCsvModal(false);
+    } catch (err) {
+      console.error("❌ Bulk upload failed:", err);
+      alert(err.message || "Failed to start bulk campaign");
+    } finally {
+      setIsLoading(false);
+      setCampaignName("");
+      setAssignedAgentId("");
+      setPendingCsvFile(null);
+      setCsvRowCount(null);
+      setCsvPreviewRows([]);
+    }
+  }}
+>
+  ▶ Run Campaign
+</button>
+
+      </div>
+    </div>
+  </div>
+)}
+
+
+{/* User menu */}
+<div className="user-menu-container">
+  <button
+    className="user-menu-btn"
+    onClick={() => setShowUserMenu((v) => !v)}
+  >
+    <div className="user-avatar">
+      {user?.firstName?.charAt(0)}
+      {user?.lastName?.charAt(0)}
+    </div>
+    <span>
+      {user?.firstName} {user?.lastName}
+    </span>
+    <span className="dropdown-arrow">▾</span>
+  </button>
+
+  {showUserMenu && (
+    <div className="user-dropdown">
+      <div className="user-info">
+        <div className="user-name">
+          {user?.firstName} {user?.lastName}
+        </div>
+        <div className="user-email">{user?.email}</div>
+        <div className="user-plan">
+          Plan:{" "}
+          <span className="plan-badge">
+            {user?.subscription?.plan}
+          </span>
+        </div>
+      </div>
+
+      <div className="dropdown-divider" />
+      <a href="/billing" className="dropdown-item">
+        💳 Billing &amp; Plans
+      </a>
+      <a href="/settings" className="dropdown-item">
+        ⚙️ Settings
+      </a>
+      <div className="dropdown-divider" />
+      <button className="dropdown-item logout-btn" onClick={logout}>
+        🚪 Sign Out
+      </button>
+    </div>
+  )}
+</div>
+
+
         </div>
       </header>
 
+      {!licenseLoading && reason ? <LicenseBanner message={reason} /> : null}
+
       {/* Backdrop for closing dropdown */}
       {showUserMenu && <div className="dropdown-backdrop" onClick={() => setShowUserMenu(false)} />}
+
+      {showLiveModeConfirm && (
+        <div className="mode-confirm-overlay" onClick={() => setShowLiveModeConfirm(false)}>
+          <div className="mode-confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="mode-confirm-eyebrow">Live Calling Confirmation</div>
+            <h3>Switch this workspace to live mode?</h3>
+            <p>
+              Live mode sends real provider traffic for this tenant. New calls and campaigns will use
+              the live calling path instead of the simulated offline path.
+            </p>
+            {systemMode?.reason ? <div className="mode-confirm-note">{systemMode.reason}</div> : null}
+            <div className="mode-confirm-actions">
+              <button type="button" onClick={() => setShowLiveModeConfirm(false)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="mode-confirm-live-btn"
+                onClick={async () => {
+                  setShowLiveModeConfirm(false);
+                  await performModeSwitch("live");
+                }}
+                disabled={modeUpdating}
+              >
+                {modeUpdating ? "Switching..." : "Confirm Live Mode"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Single Call Modal */}
       {singleCallModal && (
@@ -681,96 +1192,101 @@ export default function Topbar({ onBulkCallStart }) {
               <div className="call-number-display">{formatPhoneNumber(singleCallNumber)}</div>
 
               {/* Layout: left = dial pad, right = status + scripts + notes */}
-              <div className="call-modal-body">
-                {/* LEFT: Dial Pad */}
-                <div className="call-modal-left">
-                  <DialPad
-                    value={singleCallNumber}
-                    onDigit={handleDialDigit}
-                    onBackspace={handleDialBackspace}
-                    onClear={handleDialClear}
-                    onCall={handleDialCall}
-                    disabled={isLoading}
-                  />
-                </div>
+              {/* Inside your single call modal */}
+<div className="call-modal-body">
+  {/* LEFT: Dial Pad */}
+  <div className="call-modal-left">
+    <DialPad
+      value={singleCallNumber}
+      onDigit={handleDialDigit}
+      onBackspace={handleDialBackspace}
+      onClear={handleDialClear}
+      onCall={handleDialCall}
+      disabled={isLoading}
+    />
+  </div>
 
-                {/* RIGHT: Status, scripts, notes */}
-                <div className="call-modal-right">
-                  {/* Status */}
-                  <div className="call-status-info">
-                    <div className="status-indicator">
-                      <span className="pulse-dot"></span>
-                      <span>{getStatusLabel()}</span>
-                    </div>
-                    <div className="call-timer">
-                      {activeCall?.createdAt && (
-                        <>
-                          Started at {new Date(activeCall.createdAt).toLocaleTimeString()} ·{" "}
-                        </>
-                      )}
-                      Duration: {getLiveDuration()}
-                    </div>
-                  </div>
+  {/* RIGHT: Scrollable Content */}
+  <div className="call-modal-right">
+    <div className="call-status-info">
+      <div className="status-indicator">
+        <span className="pulse-dot"></span>
+        <span>{getStatusLabel()}</span>
+      </div>
+      <div className="call-timer">
+        {activeCall?.createdAt && (
+          <>Started at {new Date(activeCall.createdAt).toLocaleTimeString()} · </>
+        )}
+        Duration: {getLiveDuration()}
+      </div>
+    </div>
 
-                  {/* Script Section */}
-                  <div className="call-script-section">
-                    <div className="script-header">
-                      <h4>Call Script</h4>
-                      <button className="script-toggle-btn" onClick={() => setShowScripts(!showScripts)}>
-                        {showScripts ? "Hide Scripts" : "Show Scripts"}
-                      </button>
-                    </div>
+    {/* SCROLLABLE CONTENT AREA */}
+    <div className="call-content-scrollable">
+      {/* Script Section */}
+      <div className="call-script-section">
+        <div className="script-header">
+          <h4>Call Script</h4>
+          <button className="script-toggle-btn" onClick={() => setShowScripts(!showScripts)}>
+            {showScripts ? "Hide" : "Show"} Scripts
+          </button>
+        </div>
 
-                    {showScripts && (
-                      <div className="scripts-panel">
-                        <ScriptsPanel onScriptSelect={setSelectedScript} selectedScript={selectedScript} />
-                      </div>
-                    )}
+        {showScripts && (
+          <div className="scripts-panel">
+            <ScriptsPanel
+              onScriptSelect={setSelectedScript}
+              selectedScript={selectedScript}
+              fetcher={authFetch}
+            />
+          </div>
+        )}
 
-                    {selectedScript && (
-                      <div className="selected-script">
-                        <h5>{selectedScript.name}</h5>
-                        <div className="script-content">{selectedScript.content}</div>
-                      </div>
-                    )}
-                  </div>
+        {selectedScript && (
+          <div className="selected-script">
+            <h5>{selectedScript.name}</h5>
+            <div className="script-content">{selectedScript.content}</div>
+          </div>
+        )}
+      </div>
 
-                  {/* Notes Section */}
-                  <div className="call-notes-section">
-                    <h4>Call Notes</h4>
-                    <textarea
-                      placeholder="Take notes during the call..."
-                      value={callNotes}
-                      onChange={(e) => setCallNotes(e.target.value)}
-                      rows="3"
-                      className="notes-textarea"
-                    />
+      {/* Notes Section */}
+      <div className="call-notes-section">
+        <h4>Call Notes</h4>
+        <textarea
+          placeholder="Take notes during the call..."
+          value={callNotes}
+          onChange={(e) => setCallNotes(e.target.value)}
+          rows="4"
+          className="notes-textarea"
+        />
 
-                    <div className="outcome-selection">
-                      <label>Outcome:</label>
-                      <select value={callOutcome} onChange={(e) => setCallOutcome(e.target.value)}>
-                        <option value="">Select outcome...</option>
-                        <option value="interested">Interested</option>
-                        <option value="not_interested">Not Interested</option>
-                        <option value="callback">Callback Requested</option>
-                        <option value="no_answer">No Answer</option>
-                        <option value="voicemail">Left Voicemail</option>
-                        <option value="wrong_number">Wrong Number</option>
-                      </select>
-                    </div>
-                  </div>
+        <div className="outcome-selection">
+          <label>Outcome:</label>
+          <select value={callOutcome} onChange={(e) => setCallOutcome(e.target.value)}>
+            <option value="">Select outcome...</option>
+            <option value="interested">Interested</option>
+            <option value="not_interested">Not Interested</option>
+            <option value="callback">Callback Requested</option>
+            <option value="no_answer">No Answer</option>
+            <option value="voicemail">Left Voicemail</option>
+            <option value="wrong_number">Wrong Number</option>
+          </select>
+        </div>
+      </div>
+    </div>
 
-                  {/* Actions */}
-                  <div className="call-modal-actions">
-                    <button className="save-notes-btn" onClick={saveCallNotes} disabled={isLoading || !activeCall}>
-                      💾 Save Notes
-                    </button>
-                    <button className="end-call-cta" onClick={endSingleCall} disabled={isLoading || !activeCall}>
-                      🛑 End Call
-                    </button>
-                  </div>
-                </div>
-              </div>
+    {/* FIXED ACTION BUTTONS */}
+    <div className="call-modal-actions">
+      <button className="save-notes-btn" onClick={saveCallNotes} disabled={isLoading || !activeCall}>
+        Save Notes
+      </button>
+      <button className="end-call-cta" onClick={endSingleCall} disabled={isLoading || !activeCall}>
+        End Call
+      </button>
+    </div>
+  </div>
+</div>
               {/* end modal body */}
             </div>
           </div>

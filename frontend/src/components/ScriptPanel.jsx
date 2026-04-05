@@ -1,46 +1,58 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
+import API_BASE_URL from "../api";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
-
-export default function ScriptsPanel({ onScriptSelect, selectedScript }) {
+export default function ScriptsPanel({ onScriptSelect, selectedScript, fetcher }) {
   const [scripts, setScripts] = useState([]);
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState("all");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     fetchScripts();
   }, []);
 
   const fetchScripts = async () => {
+    setLoading(true);
+    setError("");
     try {
-      const response = await fetch(`${API_BASE_URL}/api/scripts`);
-      if (response.ok) {
-        const data = await response.json();
-        setScripts(data.scripts);
+      const request = fetcher
+        ? (url, options) => fetcher(url.replace(API_BASE_URL, ""), options)
+        : fetch;
+
+      const response = await request(`${API_BASE_URL}/api/scripts`);
+      if (!response.ok) {
+        throw new Error(`Failed to load scripts (${response.status})`);
       }
+      const data = await response.json();
+      setScripts(Array.isArray(data?.scripts) ? data.scripts : []);
     } catch (error) {
-      console.error('Error fetching scripts:', error);
+      setScripts([]);
+      setError(error?.message || "Unable to load scripts");
+    } finally {
+      setLoading(false);
     }
   };
 
-  const filteredScripts = filter === 'all' 
-    ? scripts 
-    : scripts.filter(script => script.category === filter);
+  const filteredScripts =
+    filter === "all"
+      ? scripts
+      : scripts.filter((script) => script.category === filter);
 
   const categories = [
-    { value: 'all', label: 'All Scripts' },
-    { value: 'sales', label: 'Sales' },
-    { value: 'followup', label: 'Follow-up' },
-    { value: 'support', label: 'Support' },
-    { value: 'collections', label: 'Collections' }
+    { value: "all", label: "All Scripts" },
+    { value: "sales", label: "Sales" },
+    { value: "followup", label: "Follow-up" },
+    { value: "support", label: "Support" },
+    { value: "collections", label: "Collections" },
   ];
 
   return (
     <div className="scripts-panel">
       <div className="scripts-filter">
-        {categories.map(cat => (
+        {categories.map((cat) => (
           <button
             key={cat.value}
-            className={`filter-btn ${filter === cat.value ? 'active' : ''}`}
+            className={`filter-btn ${filter === cat.value ? "active" : ""}`}
             onClick={() => setFilter(cat.value)}
           >
             {cat.label}
@@ -49,10 +61,15 @@ export default function ScriptsPanel({ onScriptSelect, selectedScript }) {
       </div>
       
       <div className="scripts-list">
-        {filteredScripts.map(script => (
+        {loading ? <div className="scripts-empty">Loading scripts...</div> : null}
+        {!loading && error ? <div className="scripts-empty">{error}</div> : null}
+        {!loading && !error && filteredScripts.length === 0 ? (
+          <div className="scripts-empty">No scripts found</div>
+        ) : null}
+        {filteredScripts.map((script) => (
           <div
             key={script.id}
-            className={`script-item ${selectedScript?.id === script.id ? 'selected' : ''}`}
+            className={`script-item ${selectedScript?.id === script.id ? "selected" : ""}`}
             onClick={() => onScriptSelect(script)}
           >
             <div className="script-item-name">{script.name}</div>

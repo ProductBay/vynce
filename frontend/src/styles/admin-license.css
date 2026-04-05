@@ -1,0 +1,1086 @@
+/* ================================
+   ADMIN OPERATIONS SURFACES
+   ================================ */
+
+.license-page {
+  padding: 24px;
+  max-width: 1220px;
+}
+
+.enterprise-license-page {
+  display: grid;
+  gap: 20px;
+}
+
+.license-section-kicker {
+  margin-bottom: 8px;
+  color: #7dd3fc;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.license-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px 26px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(9, 15, 29, 0.88));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 16px 34px rgba(2, 6, 23, 0.24);
+}
+
+.license-hero h2 {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 800;
+  color: #f8fafc;
+  letter-spacing: -0.03em;
+}
+
+.license-hero-copy,
+.audit-subtitle,
+.license-card-subtitle,
+.webhook-audit-subtitle {
+  margin: 8px 0 0;
+  max-width: 760px;
+  color: #94a3b8;
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+.license-hero-chip,
+.audit-count-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.license-hero-chip {
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.18);
+  color: #dcfce7;
+  white-space: nowrap;
+}
+
+.license-live-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #4ade80;
+  box-shadow: 0 0 0 5px rgba(74, 222, 128, 0.14);
+}
+
+.license-toolbar {
+  display: grid;
+  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.tenant-picker.enterprise,
+.license-summary-strip {
+  padding: 18px 20px;
+  border-radius: 20px;
+  background: rgba(11, 18, 32, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tenant-picker.enterprise label {
+  display: block;
+  margin-bottom: 10px;
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.tenant-picker.enterprise select,
+.webhook-filter-bar select,
+.webhook-filter-bar input,
+.onboarding-review-form select,
+.onboarding-review-form textarea,
+.license-field select,
+.license-field input {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #020617;
+  color: #f8fafc;
+  padding: 10px 12px;
+}
+
+.tenant-create-cta-row {
+  margin-top: 12px;
+}
+
+.tenant-create-cta-row button,
+.tenant-create-actions button {
+  min-height: 42px;
+  border: none;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: filter 0.18s ease, transform 0.18s ease, opacity 0.18s ease;
+}
+
+.tenant-create-cta-row button:hover,
+.tenant-create-actions button:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.tenant-create-cta-row button:disabled,
+.tenant-create-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.tenant-create-cta-row button.secondary {
+  width: 100%;
+  background: linear-gradient(135deg, #334155, #1e293b);
+  color: #e2e8f0;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+}
+
+.tenant-create-form {
+  margin-top: 14px;
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tenant-create-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.tenant-create-actions button.primary {
+  min-width: 230px;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #03150b;
+}
+
+.success-text {
+  margin: 0;
+  color: #86efac;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.license-toolbar-loading {
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.license-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.license-summary-pill {
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.license-summary-pill span {
+  display: block;
+  margin-bottom: 8px;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.license-summary-pill strong {
+  color: #f8fafc;
+  font-size: 14px;
+  word-break: break-word;
+}
+
+.license-context-banner,
+.admin-warning {
+  padding: 14px 18px;
+  border-radius: 16px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.18);
+  color: #fef3c7;
+  font-size: 14px;
+}
+
+.admin-warning.strong {
+  margin-top: 16px;
+}
+
+.issue-help-text {
+  margin: 0 0 14px;
+  color: #94a3b8;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.issued-key-box {
+  margin-top: 16px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.issued-key-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.issued-key-box code {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #020617;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #bbf7d0;
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.issued-key-box p {
+  margin: 10px 0 0;
+  color: #d1fae5;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* ================================
+   LICENSE CONTROL CARD
+   ================================ */
+
+.license-card,
+.audit-card {
+  background: #0b1220;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 22px;
+  padding: 22px 24px;
+  color: #e5e7eb;
+  box-shadow:
+    0 12px 28px rgba(2, 6, 23, 0.26),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.license-card.enterprise {
+  padding: 24px 26px 26px;
+}
+
+.license-card h3,
+.audit-card h3 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.license-card h4 {
+  margin: 0 0 14px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #cbd5f5;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.license-card-top,
+.audit-card-header,
+.webhook-audit-header,
+.onboarding-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.license-status-pill,
+.webhook-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.license-status-pill.active {
+  background: rgba(34, 197, 94, 0.12);
+  color: #bbf7d0;
+}
+
+.license-status-pill.suspended {
+  background: rgba(239, 68, 68, 0.12);
+  color: #fecaca;
+}
+
+.license-status-pill.temporarily_suspended {
+  background: rgba(245, 158, 11, 0.12);
+  color: #fde68a;
+}
+
+.license-status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.9;
+}
+
+.license-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin: 18px 0;
+}
+
+.license-overview-card,
+.license-detail-card,
+.onboarding-queue-item,
+.onboarding-detail-summary {
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.license-overview-card.critical {
+  background: rgba(59, 130, 246, 0.08);
+  border-color: rgba(59, 130, 246, 0.18);
+}
+
+.license-overview-card span,
+.license-detail-list span,
+.license-field span {
+  display: block;
+  margin-bottom: 8px;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.license-overview-card strong,
+.license-detail-list strong {
+  display: block;
+  color: #f8fafc;
+  font-size: 14px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.license-overview-card small {
+  display: block;
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.license-impact-banner,
+.license-action-guidance {
+  padding: 13px 16px;
+  border-radius: 16px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.license-impact-banner {
+  margin-bottom: 18px;
+  background: rgba(236, 72, 153, 0.08);
+  border: 1px solid rgba(236, 72, 153, 0.14);
+  color: #fbcfe8;
+}
+
+.license-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: 16px;
+}
+
+.license-detail-list {
+  display: grid;
+  gap: 14px;
+}
+
+.license-detail-list div {
+  display: grid;
+  gap: 6px;
+}
+
+.license-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.license-field {
+  display: grid;
+  gap: 8px;
+}
+
+.license-field.full {
+  grid-column: 1 / -1;
+}
+
+.license-action-guidance {
+  margin-top: 16px;
+  background: rgba(248, 250, 252, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: #cbd5e1;
+}
+
+.license-action-guidance strong {
+  color: #f8fafc;
+}
+
+.license-actions.enterprise {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.license-card button,
+.webhook-refresh-btn,
+.webhook-apply-btn,
+.webhook-clear-btn,
+.onboarding-submit-btn {
+  min-height: 42px;
+  border: none;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter 0.18s ease, transform 0.18s ease, opacity 0.18s ease;
+}
+
+.license-card button:hover,
+.webhook-refresh-btn:hover,
+.webhook-apply-btn:hover,
+.webhook-clear-btn:hover,
+.onboarding-submit-btn:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.license-card button:disabled,
+.webhook-refresh-btn:disabled,
+.webhook-apply-btn:disabled,
+.webhook-clear-btn:disabled,
+.onboarding-submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.license-card button.primary,
+.webhook-refresh-btn,
+.webhook-apply-btn,
+.onboarding-submit-btn {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #03150b;
+}
+
+.license-card button.secondary {
+  background: linear-gradient(135deg, #f59e0b, #b45309);
+  color: #fff;
+}
+
+.license-card button.danger {
+  background: linear-gradient(135deg, #ef4444, #b91c1c);
+  color: #fff;
+}
+
+.error-text {
+  color: #fecaca;
+  font-size: 14px;
+}
+
+.license-card.error,
+.audit-card.error {
+  border-color: rgba(239, 68, 68, 0.32);
+}
+
+/* ================================
+   AUDIT TABLE
+   ================================ */
+
+.audit-card.enterprise {
+  margin-top: 4px;
+}
+
+.audit-count-pill {
+  background: rgba(59, 130, 246, 0.12);
+  color: #bfdbfe;
+}
+
+.audit-table-wrap,
+.webhook-audit-table-wrap {
+  overflow-x: auto;
+}
+
+.audit-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.audit-table th,
+.audit-table td {
+  padding: 12px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  text-align: left;
+}
+
+.audit-table th {
+  color: #c7d2fe;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.audit-table tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.audit-time {
+  display: grid;
+  gap: 4px;
+}
+
+.audit-time strong {
+  color: #f8fafc;
+  font-size: 13px;
+}
+
+.audit-time span {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.audit-action {
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.audit-action.LICENSE_DISABLED,
+.audit-action.TENANT_SUSPENDED {
+  color: #fda4af;
+}
+
+.audit-action.LICENSE_ENABLED,
+.audit-action.TENANT_REENABLED {
+  color: #86efac;
+}
+
+.audit-action.PLAN_CHANGED,
+.audit-action.LIMITS_CHANGED,
+.audit-action.LICENSE_UPDATED,
+.audit-action.TEMPORARY_DISABLED,
+.audit-action.TENANT_TEMP_SUSPENDED {
+  color: #fde68a;
+}
+
+/* ================================
+   WEBHOOK AUDIT
+   ================================ */
+
+.webhook-audit-header {
+  margin-bottom: 18px;
+}
+
+.webhook-filter-bar {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.webhook-filter-bar input::placeholder {
+  color: #64748b;
+}
+
+.webhook-refresh-btn,
+.webhook-apply-btn {
+  background: linear-gradient(135deg, #2563eb, #0f172a);
+  color: #eff6ff;
+}
+
+.webhook-clear-btn {
+  background: rgba(148, 163, 184, 0.16);
+  color: #e2e8f0;
+}
+
+.webhook-audit-card {
+  overflow: hidden;
+}
+
+.webhook-chip-status {
+  background: rgba(37, 99, 235, 0.16);
+  color: #bfdbfe;
+}
+
+.webhook-chip-voice {
+  background: rgba(16, 185, 129, 0.16);
+  color: #bbf7d0;
+}
+
+.webhook-match-voicemail {
+  background: rgba(168, 85, 247, 0.16);
+  color: #e9d5ff;
+}
+
+.webhook-match-human {
+  background: rgba(34, 197, 94, 0.16);
+  color: #bbf7d0;
+}
+
+.webhook-match-machine {
+  background: rgba(245, 158, 11, 0.16);
+  color: #fde68a;
+}
+
+.webhook-match-unclassified {
+  background: rgba(148, 163, 184, 0.16);
+  color: #e2e8f0;
+}
+
+.webhook-substate,
+.webhook-identifiers,
+.webhook-audit-hint {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.webhook-identifiers {
+  margin-bottom: 4px;
+  word-break: break-all;
+}
+
+.webhook-identifiers strong {
+  color: #f8fafc;
+  margin-right: 6px;
+}
+
+.webhook-details summary {
+  cursor: pointer;
+  color: #93c5fd;
+  font-weight: 600;
+}
+
+.webhook-details pre {
+  margin-top: 10px;
+  padding: 12px;
+  background: #020617;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  color: #cbd5e1;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ================================
+   ONBOARDING ADMIN
+   ================================ */
+
+.onboarding-admin-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  gap: 20px;
+}
+
+.onboarding-queue-list {
+  display: grid;
+  gap: 12px;
+}
+
+.onboarding-queue-item {
+  width: 100%;
+  text-align: left;
+  color: #e5e7eb;
+  cursor: pointer;
+}
+
+.onboarding-queue-item.selected {
+  border-color: rgba(59, 130, 246, 0.55);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.35);
+}
+
+.onboarding-queue-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.onboarding-queue-meta,
+.onboarding-detail-header p {
+  color: #94a3b8;
+  font-size: 12px;
+  margin-top: 4px;
+  word-break: break-word;
+}
+
+.onboarding-detail-header h4 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  color: #f8fafc;
+}
+
+.onboarding-detail-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.onboarding-review-form {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.onboarding-review-form label {
+  display: grid;
+  gap: 8px;
+  color: #cbd5e1;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.onboarding-chip {
+  text-transform: capitalize;
+}
+
+.onboarding-chip-draft {
+  background: rgba(148, 163, 184, 0.16);
+  color: #e2e8f0;
+}
+
+.onboarding-chip-pending_review {
+  background: rgba(59, 130, 246, 0.18);
+  color: #bfdbfe;
+}
+
+.onboarding-chip-changes_requested {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fde68a;
+}
+
+.onboarding-chip-approved {
+  background: rgba(34, 197, 94, 0.18);
+  color: #bbf7d0;
+}
+
+.onboarding-chip-rejected {
+  background: rgba(239, 68, 68, 0.18);
+  color: #fecaca;
+}
+
+.onboarding-admin-grid.enterprise {
+  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+  align-items: start;
+}
+
+.onboarding-queue-panel,
+.onboarding-review-panel {
+  min-height: 100%;
+}
+
+.onboarding-queue-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.onboarding-queue-item {
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    background-color 0.18s ease;
+}
+
+.onboarding-queue-item:hover {
+  transform: translateY(-1px);
+  border-color: rgba(96, 165, 250, 0.28);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.onboarding-queue-footer {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.onboarding-queue-stat {
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.onboarding-queue-stat span,
+.onboarding-detail-summary.enterprise span,
+.onboarding-review-note span,
+.onboarding-step-kicker {
+  display: block;
+  margin-bottom: 6px;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.onboarding-queue-stat strong,
+.onboarding-detail-summary.enterprise strong,
+.onboarding-review-note strong {
+  display: block;
+  color: #f8fafc;
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.onboarding-ops-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin: 18px 0;
+}
+
+.onboarding-context-banner,
+.onboarding-impact-banner {
+  margin-bottom: 16px;
+}
+
+.onboarding-detail-summary.enterprise {
+  margin-bottom: 18px;
+}
+
+.onboarding-review-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+  gap: 18px;
+}
+
+.onboarding-review-block {
+  padding: 18px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.onboarding-block-header {
+  margin-bottom: 14px;
+}
+
+.onboarding-block-header h4 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: 0.02em;
+}
+
+.onboarding-block-header p {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.onboarding-step-list.admin.enterprise {
+  gap: 12px;
+}
+
+.onboarding-step-kicker {
+  margin-bottom: 8px;
+}
+
+.onboarding-action-guidance {
+  margin-bottom: 16px;
+}
+
+.onboarding-review-form.enterprise {
+  gap: 16px;
+  margin-top: 0;
+}
+
+.onboarding-review-notes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.onboarding-review-note {
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.onboarding-actions.enterprise {
+  margin-top: 4px;
+}
+
+.onboarding-submit-btn-approve {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #03150b;
+}
+
+.onboarding-submit-btn-request_changes {
+  background: linear-gradient(135deg, #f59e0b, #b45309);
+  color: #fff7ed;
+}
+
+.onboarding-submit-btn-reject {
+  background: linear-gradient(135deg, #ef4444, #b91c1c);
+  color: #fff;
+}
+
+/* ================================
+   SHARED MODALS / LEGACY SUPPORT
+   ================================ */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: #020617;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 24px;
+  width: 420px;
+  color: #e5e7eb;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.6);
+}
+
+.modal h3 {
+  margin-bottom: 12px;
+  font-size: 18px;
+  color: #f8fafc;
+}
+
+.modal-message {
+  font-size: 14px;
+  margin-bottom: 16px;
+  color: #cbd5f5;
+}
+
+.modal-confirm-text input {
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: #020617;
+  color: #fff;
+  margin-top: 6px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.modal-actions button {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+}
+
+.modal-actions button.danger {
+  background: linear-gradient(135deg, #ef4444, #b91c1c);
+  color: #fff;
+}
+
+.modal-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.temp-disable,
+.temp-disabled-badge {
+  display: none;
+}
+
+@media (max-width: 1180px) {
+  .license-toolbar,
+  .license-detail-grid,
+  .license-summary-strip,
+  .license-overview-grid,
+  .onboarding-detail-summary,
+  .onboarding-ops-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 980px) {
+  .onboarding-admin-grid,
+  .onboarding-admin-grid.enterprise,
+  .onboarding-review-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 820px) {
+  .license-hero,
+  .audit-card-header,
+  .webhook-audit-header,
+  .license-card-top,
+  .onboarding-detail-header {
+    flex-direction: column;
+  }
+
+  .license-form-grid,
+  .webhook-filter-bar,
+  .onboarding-review-notes,
+  .onboarding-queue-footer {
+    grid-template-columns: 1fr;
+  }
+}

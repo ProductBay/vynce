@@ -1,4 +1,6 @@
 // backend/routes/analytics.js
+import { authMiddleware } from "../dialer.js";
+
 const express = require("express");
 const router = express.Router();
 const Call = require("../models/Call"); // adjust path/model name

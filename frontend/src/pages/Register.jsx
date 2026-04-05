@@ -14,7 +14,7 @@ export default function Register() {
     password: '',
     confirmPassword: '',
     company: '',
-    plan: 'starter',
+    plan: 'professional',
   });
 
   const [isLoading, setIsLoading] = useState(false);
@@ -62,7 +62,7 @@ export default function Register() {
     <div className="auth-container">
       <div className="auth-card">
         <div className="auth-header">
-          <h1>Join Vynce</h1>
+          <h1>Join RDS</h1>
           <p>Create your account and start calling</p>
         </div>
 
@@ -164,9 +164,9 @@ export default function Register() {
               value={formData.plan}
               onChange={handleChange}
             >
-              <option value="starter">Starter - $49/month</option>
-              <option value="professional">Professional - $99/month</option>
-              <option value="enterprise">Enterprise - $199/month</option>
+              <option value="professional">Professional - $199/month</option>
+              <option value="team">Team - $599/month</option>
+              <option value="enterprise">Enterprise - Custom</option>
             </select>
           </div>
 

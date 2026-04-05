@@ -1,82 +1,518 @@
-/* Reset & defaults */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+/* =========================================================
+   Auth.css — Cyber Glass (Matches Dashboard/Calls/Topbar vibe)
+   - Animated aurora background + grid overlay
+   - Frosted glass card with neon edge
+   - 3D tilt friendly (your JSX already handles rotate)
+   - Subtle micro-interactions + focus glows
+   ========================================================= */
+
+/* ---------- Theme tokens ---------- */
+:root {
+  --auth-bg: #07080c; /* void */
+  --auth-text: rgba(255, 255, 255, 0.92);
+  --auth-muted: rgba(255, 255, 255, 0.62);
+
+  --glass: rgba(255, 255, 255, 0.06);
+  --glass-strong: rgba(255, 255, 255, 0.09);
+  --glass-border: rgba(255, 255, 255, 0.14);
+  --glass-border-2: rgba(255, 255, 255, 0.10);
+
+  /* accents (cyber, NOT default blue-heavy) */
+  --a-mint: #9bffb0;
+  --a-pink: #ff6fd8;
+  --a-gold: #ffe08a;
+  --a-violet: #c4b5fd;
+
+  --danger: #ff5a7a;
+
+  --font-sans: "Inter", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+
+  --shadow-soft: 0 14px 30px rgba(0, 0, 0, 0.35);
+  --shadow-hard: 0 24px 70px rgba(0, 0, 0, 0.65);
 }
 
-body {
-  font-family: "Segoe UI", Roboto, sans-serif;
-  background-color: #0f0f10;
-  color: #eaeaea;
-  height: 100vh;
+/* ---------- Animations ---------- */
+@keyframes authAuroraDrift {
+  0% {
+    transform: translate3d(0%, 0%, 0);
+    filter: hue-rotate(0deg);
+  }
+  50% {
+    transform: translate3d(-2%, -2%, 0);
+    filter: hue-rotate(8deg);
+  }
+  100% {
+    transform: translate3d(0%, 0%, 0);
+    filter: hue-rotate(0deg);
+  }
 }
 
-/* Layout */
-.app-shell {
-  display: flex;
-  height: 100%;
+
+@keyframes authOrbit {
+  0%   { transform: translate3d(0,0,0) rotate(0deg); }
+  100% { transform: translate3d(0,0,0) rotate(360deg); }
 }
 
-/* Sidebar */
-.sidebar {
-  width: 230px;
-  background: #141416;
-  border-right: 1px solid #242426;
-  display: flex;
-  flex-direction: column;
+@keyframes authGridFloat {
+  0%   { transform: translateY(0); opacity: 0.18; }
+  50%  { transform: translateY(-10px); opacity: 0.26; }
+  100% { transform: translateY(0); opacity: 0.18; }
 }
 
-.sidebar .logo {
-  color: #24a1de;
-  font-weight: bold;
-  font-size: 1.4rem;
-  padding: 1.2rem;
+@keyframes authGlowPulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.70; }
 }
 
-.sidebar nav a {
-  display: block;
-  padding: 0.8rem 1.2rem;
-  text-decoration: none;
-  color: #b0b0b0;
-  transition: background 0.15s;
+@keyframes authShimmer {
+  0% { transform: translateX(-120%) skewX(-12deg); opacity: 0; }
+  20% { opacity: 1; }
+  55% { opacity: 1; }
+  100% { transform: translateX(120%) skewX(-12deg); opacity: 0; }
 }
 
-.sidebar nav a:hover {
-  background: #242629;
-  color: #fff;
+/* ---------- Page shell ---------- */
+/* ---------- Page shell (BACKGROUND ONLY) ---------- */
+.auth-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 2rem 1rem;
+  position: relative;
+  overflow: hidden;
+
+  color: var(--auth-text);
+  font-family: var(--font-sans);
+
+  /* Cyber dialer base */
+  background:
+    radial-gradient(1200px 900px at 18% 12%, rgba(0, 245, 255, 0.10), transparent 55%),
+    radial-gradient(900px 700px at 82% 20%, rgba(255, 111, 216, 0.10), transparent 55%),
+    radial-gradient(1000px 800px at 50% 90%, rgba(255, 224, 138, 0.08), transparent 60%),
+    linear-gradient(180deg, rgba(7, 8, 12, 1) 0%, rgba(6, 7, 11, 1) 60%, rgba(5, 6, 10, 1) 100%);
 }
 
-/* Topbar */
-.topbar {
-  height: 60px;
-  background: #1a1b1d;
-  border-bottom: 1px solid #242426;
+/* Aurora + depth haze (subtle motion) */
+.auth-page::before {
+  content: "";
+  position: absolute;
+  inset: -25%;
+  z-index: 0;
+  pointer-events: none;
+
+  background:
+    radial-gradient(closest-side at 24% 30%, rgba(0, 245, 255, 0.16), transparent 60%),
+    radial-gradient(closest-side at 75% 35%, rgba(255, 111, 216, 0.14), transparent 62%),
+    radial-gradient(closest-side at 50% 80%, rgba(168, 85, 247, 0.10), transparent 64%);
+
+  opacity: 0.9;
+  animation: authAuroraDrift 16s ease-in-out infinite;
+  filter: saturate(1.1);
+}
+
+/* Voice-dialer overlay: waveform + scanlines (very subtle) */
+.auth-page::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+
+  /* 1) faint scanlines  2) faint waveform svg pattern */
+  background-image:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.035) 0px,
+      rgba(255, 255, 255, 0.035) 1px,
+      transparent 2px,
+      transparent 6px
+    ),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='900' height='280' viewBox='0 0 900 280'%3E%3Cpath d='M0 140 C 40 80, 80 200, 120 140 S 200 80, 240 140 S 320 200, 360 140 S 440 80, 480 140 S 560 200, 600 140 S 680 80, 720 140 S 800 200, 840 140 S 900 80, 900 140' fill='none' stroke='rgba(0,245,255,0.12)' stroke-width='2'/%3E%3Cpath d='M0 170 C 50 140, 100 200, 150 170 S 250 140, 300 170 S 400 200, 450 170 S 550 140, 600 170 S 700 200, 750 170 S 850 140, 900 170' fill='none' stroke='rgba(255,111,216,0.10)' stroke-width='2'/%3E%3C/svg%3E");
+
+  background-repeat: repeat, repeat;
+  background-size: auto, 900px 280px;
+  background-position: 0 0, 0 40%;
+
+  /* keep waveform mostly near the center */
+  mask-image: radial-gradient(closest-side at 50% 45%, rgba(0,0,0,1), rgba(0,0,0,0) 78%);
+  opacity: 0.65;
+  animation: authGridFloat 12s ease-in-out infinite;
+  mix-blend-mode: screen;
+}
+
+/* ---------- Decorative elements from JSX ---------- */
+.auth-orbit {
+  position: absolute;
+  inset: auto;
+  width: 520px;
+  height: 520px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.75;
+  filter: blur(0px);
+  mask-image: radial-gradient(circle, rgba(0,0,0,1) 40%, rgba(0,0,0,0) 70%);
+}
+
+.auth-orbit-1 {
+  top: -220px;
+  left: -220px;
+  border: 1px solid rgba(155, 255, 176, 0.18);
+  box-shadow: 0 0 50px rgba(155, 255, 176, 0.08);
+  animation: authOrbit 18s linear infinite;
+}
+
+.auth-orbit-2 {
+  bottom: -260px;
+  right: -240px;
+  border: 1px solid rgba(255, 111, 216, 0.18);
+  box-shadow: 0 0 55px rgba(255, 111, 216, 0.08);
+  animation: authOrbit 24s linear infinite reverse;
+}
+
+/* Grid overlay */
+/* Grid overlay (more cyber, less loud) */
+.auth-grid-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+
+  background-image:
+    linear-gradient(rgba(0, 245, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(168, 85, 247, 0.05) 1px, transparent 1px);
+
+  background-size: 64px 64px;
+  background-position: 0 0;
+
+  /* Fade grid toward edges */
+  mask-image: radial-gradient(closest-side at 50% 40%, rgba(0,0,0,1), rgba(0,0,0,0) 78%);
+  opacity: 0.35;
+
+  animation: authGridFloat 10s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-page::before,
+  .auth-page::after,
+  .auth-orbit-1,
+  .auth-orbit-2,
+  .auth-grid-overlay {
+    animation: none !important;
+  }
+}
+/* ---------- 3D wrapper (gives perspective) ---------- */
+.auth-card-3d-wrapper {
+  position: relative;
+  z-index: 2;
+  perspective: 1100px;
+  width: min(520px, 92vw);
+}
+
+/* ---------- Card ---------- */
+.auth-card {
+  position: relative;
+  border-radius: 20px;
+  padding: 1.6rem 1.6rem 1.2rem;
+  box-shadow: var(--shadow-hard);
+  border: 1px solid var(--glass-border);
+  background: linear-gradient(180deg, var(--glass-strong), var(--glass));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  transform-style: preserve-3d;
+  will-change: transform;
+  overflow: hidden;
+}
+
+/* subtle neon edge */
+.auth-card::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: 20px;
+  pointer-events: none;
+  background: linear-gradient(
+    135deg,
+    rgba(155, 255, 176, 0.22),
+    rgba(255, 111, 216, 0.18),
+    rgba(255, 224, 138, 0.18)
+  );
+  opacity: 0.7;
+  filter: blur(12px);
+  z-index: 0;
+}
+
+/* shimmer sweep */
+.auth-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.10),
+    transparent
+  );
+  width: 55%;
+  transform: translateX(-120%) skewX(-12deg);
+  animation: authShimmer 7s ease-in-out infinite;
+  opacity: 0.0;
+}
+
+/* inner glow element from JSX */
+.auth-card-glow {
+  position: absolute;
+  inset: -40%;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(closest-side at 30% 35%, rgba(155, 255, 176, 0.18), transparent 60%),
+    radial-gradient(closest-side at 70% 40%, rgba(255, 111, 216, 0.16), transparent 62%),
+    radial-gradient(closest-side at 50% 75%, rgba(255, 224, 138, 0.14), transparent 62%);
+  animation: authGlowPulse 2.8s ease-in-out infinite;
+}
+
+/* lift content above glow/shimmer layers */
+.auth-card > * {
+  position: relative;
+  z-index: 2;
+}
+
+/* ---------- Header ---------- */
+.auth-header h1 {
+  margin: 1rem 0 0.5rem;
+  font-size: 1.6rem;
+  font-weight: 900;
+  letter-spacing: 0.2px;
+}
+
+.auth-header p {
+  margin: 0 0 1.25rem;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--auth-muted);
+}
+
+/* Logo row */
+.auth-logo-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 1.4rem;
+  gap: 12px;
 }
 
-.topbar h1 {
-  font-size: 1rem;
-  color: #eaeaea;
-  letter-spacing: 0.5px;
+.auth-logo-pulse {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 16px 30px rgba(0,0,0,0.35);
 }
 
-/* Main content */
-.main-content {
-  flex: 1;
-  background: #0f0f10;
-  padding: 1.5rem;
-  overflow-y: auto;
+.auth-logo-icon {
+  font-size: 1.15rem;
+  filter: drop-shadow(0 10px 16px rgba(0,0,0,0.35));
 }
 
-/* Example content cards */
-.card {
-  background: #1a1b1d;
-  border-radius: 6px;
-  padding: 1rem;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.35);
-  color: #eaeaea;
+.auth-logo-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.auth-logo-title {
+  font-weight: 900;
+  letter-spacing: 0.22em;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  background: linear-gradient(90deg, var(--a-mint), var(--a-pink), var(--a-gold));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.auth-logo-subtitle {
+  font-size: 0.78rem;
+  color: var(--auth-muted);
+}
+
+/* ---------- Form ---------- */
+.auth-form {
+  display: grid;
+  gap: 0.95rem;
+}
+
+.auth-label {
+  display: grid;
+  gap: 8px;
+}
+
+.auth-label > span {
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.70);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.auth-label input {
+  width: 100%;
+  padding: 0.95rem 0.95rem;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--auth-text);
+  font-size: 0.95rem;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.auth-label input:focus {
+  outline: none;
+  border-color: rgba(155, 255, 176, 0.55);
+  background: rgba(0, 0, 0, 0.28);
+  box-shadow: 0 0 0 3px rgba(155, 255, 176, 0.14), 0 0 28px rgba(255, 111, 216, 0.10);
+}
+
+/* ---------- Error ---------- */
+.auth-error {
+  border: 1px solid rgba(255, 90, 122, 0.30);
+  background: rgba(255, 90, 122, 0.12);
+  color: rgba(255, 255, 255, 0.92);
+  border-radius: 14px;
+  padding: 0.85rem 0.95rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+/* ---------- Footer / actions ---------- */
+.auth-form-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 0.25rem;
+}
+
+/* Primary button */
+.auth-button {
+  width: 100%;
+  padding: 0.95rem 1.05rem;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  cursor: pointer;
+  font-weight: 900;
+  letter-spacing: 0.3px;
+
+  /* prismatic cyber button */
+  background: linear-gradient(135deg,
+    rgba(155, 255, 176, 0.90),
+    rgba(255, 111, 216, 0.75),
+    rgba(255, 224, 138, 0.70)
+  );
+  color: rgba(10, 10, 12, 0.92);
+  box-shadow: 0 18px 32px rgba(0,0,0,0.35);
+  transition: transform 0.18s ease, filter 0.18s ease, box-shadow 0.18s ease;
+}
+
+.auth-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  filter: brightness(1.05) saturate(1.05);
+  box-shadow: 0 26px 44px rgba(0,0,0,0.50);
+}
+
+.auth-button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+  filter: none;
+  box-shadow: none;
+}
+
+/* small footer */
+.auth-footer-small {
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.10);
+  font-size: 0.9rem;
+  color: var(--auth-muted);
+}
+
+.auth-link {
+  color: rgba(255, 255, 255, 0.92);
+  font-weight: 900;
+  text-decoration: none;
+  background: linear-gradient(90deg, var(--a-mint), var(--a-pink));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.auth-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* bottom brand */
+.auth-bottom-brand {
+  position: absolute;
+  bottom: 18px;
+  left: 0;
+  right: 0;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.85rem;
+  padding: 0 1rem;
+  text-align: center;
+}
+
+.auth-bottom-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(155, 255, 176, 0.85);
+  box-shadow: 0 0 0 3px rgba(155, 255, 176, 0.12);
+}
+
+.auth-brand-link {
+  color: rgba(255, 255, 255, 0.75);
+  text-decoration: none;
+  font-weight: 800;
+}
+
+.auth-brand-link:hover {
+  color: rgba(255, 255, 255, 0.92);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ---------- Reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .auth-page::before,
+  .auth-orbit-1,
+  .auth-orbit-2,
+  .auth-grid-overlay,
+  .auth-card::after,
+  .auth-card-glow {
+    animation: none !important;
+  }
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 540px) {
+  .auth-card-3d-wrapper {
+    width: 94vw;
+  }
+  .auth-card {
+    padding: 1.25rem 1.15rem 1.05rem;
+  }
+  .auth-header h1 {
+    font-size: 1.4rem;
+  }
 }

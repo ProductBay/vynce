@@ -186,13 +186,23 @@
 
 .settings-row input[type="text"],
 .settings-row input[type="tel"],
-.settings-row input[type="number"] {
+.settings-row input[type="number"],
+.settings-row input[type="password"],
+.settings-row input[type="url"],
+.settings-row textarea,
+.settings-row select {
   padding: 8px 10px;
   border-radius: 8px;
   border: 1px solid #d1d5db;
   font-size: 14px;
   color: #111827;
   background-color: #ffffff;
+}
+
+.settings-row textarea {
+  resize: vertical;
+  min-height: 120px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 .settings-row input::placeholder {
@@ -259,6 +269,63 @@
   color: #111827;
 }
 
+.vonage-status-card {
+  margin-top: 14px;
+  border-radius: 12px;
+  padding: 14px 16px;
+  border: 1px solid #d1d5db;
+  background: #f8fafc;
+}
+
+.vonage-status-card.ok {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
+.vonage-status-card.error {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.vonage-status-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.verification-code {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.08);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.verification-meta {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.verification-ai,
+.verification-actions-list {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.verification-ai p,
+.verification-actions-list ul {
+  margin: 6px 0 0;
+}
+
+.verification-actions-list ul {
+  padding-left: 18px;
+}
+
 .vonage-plan {
   margin-bottom: 4px;
 }
@@ -314,6 +381,12 @@
   text-decoration: underline;
 }
 
+.settings-inline-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
 /* ADMIN / DANGER CARD */
 
 .danger-card {
@@ -325,4 +398,85 @@
   font-size: 13px;
   color: #991b1b;
   margin-bottom: 12px;
+}
+
+.settings-seat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.settings-seat-stat {
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.04);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.settings-seat-stat span {
+  display: block;
+  margin-bottom: 6px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.settings-seat-stat strong {
+  color: #0f172a;
+  font-size: 15px;
+}
+
+.settings-seat-users {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.settings-seat-user {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.03);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.settings-seat-email {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.settings-add-user-form {
+  display: grid;
+  gap: 14px;
+  margin-top: 8px;
+}
+
+.settings-two-column {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.settings-row-checkbox {
+  display: flex;
+  align-items: flex-end;
+}
+
+@media (max-width: 900px) {
+  .settings-seat-grid,
+  .settings-two-column {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-seat-user {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }

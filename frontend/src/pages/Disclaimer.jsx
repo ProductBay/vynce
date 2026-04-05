@@ -10,7 +10,7 @@ export default function Disclaimer() {
 
       <h2>1. Software Only – No Call Center Services</h2>
       <p>
-        Vynce is a software platform provided by A&apos;Dash Technologies
+        RDS is a software platform provided by A&apos;Dash Technologies
         (“A&apos;Dash”). We provide tools that call centers, sales teams, and
         other organizations can use to manage and automate their own
         communications.
@@ -36,7 +36,7 @@ export default function Disclaimer() {
       </p>
       <p>
         You are solely responsible for obtaining your own legal advice regarding
-        the use of Vynce, determining whether your intended use complies with
+        the use of RDS, determining whether your intended use complies with
         applicable laws, and configuring the Service (including contact lists,
         call flows, scripts, and voicemails) in compliance with those laws.
       </p>
@@ -70,7 +70,7 @@ export default function Disclaimer() {
 
       <h2>5. No Guarantee of Results</h2>
       <p>
-        While Vynce is designed to assist with outreach and calling campaigns, we
+        While RDS is designed to assist with outreach and calling campaigns, we
         do not guarantee any particular results, including but not limited to:
       </p>
       <ul>
