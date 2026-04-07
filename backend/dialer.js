@@ -104,18 +104,43 @@ if (digits.length === 11 && digits.startsWith("1")) {
     );
   }
 
+  const normalizedTenantId = String(tenantId || "").trim();
+  const callbackContext = createVonageWebhookContextToken({
+    tenantId: normalizedTenantId,
+    callId,
+    target: formatted,
+  });
+  const callbackQuery = new URLSearchParams({
+    callId: String(callId),
+    target: formatted,
+  });
+  if (normalizedTenantId) {
+    callbackQuery.set("tenantId", normalizedTenantId);
+  }
+  if (callbackContext) {
+    callbackQuery.set("ctx", callbackContext);
+  }
+
+  const eventQuery = new URLSearchParams({
+    callId: String(callId),
+  });
+  if (normalizedTenantId) {
+    eventQuery.set("tenantId", normalizedTenantId);
+  }
+  if (callbackContext) {
+    eventQuery.set("ctx", callbackContext);
+  }
+
   const payload = {
     to: [{ type: "phone", number: formatted }],
     from: { type: "phone", number: fromNumber },
 
     answer_url: [
-      `${publicWebhookUrl}/api/voice?callId=${encodeURIComponent(
-        callId
-      )}&target=${encodeURIComponent(formatted)}`
+      `${publicWebhookUrl}/api/voice?${callbackQuery.toString()}`
     ],
 
     event_url: [
-      `${publicWebhookUrl}/api/status?callId=${encodeURIComponent(callId)}`
+      `${publicWebhookUrl}/api/status?${eventQuery.toString()}`
     ],
 
     event_method: "POST",
@@ -419,6 +444,39 @@ async function getOrCreateLicenseSettings(tenantId = "default") {
   return doc;
 }
 
+async function getExistingLicenseSettingsOrThrow(tenantId) {
+  const tid = String(tenantId || "").trim();
+
+  if (!tid) {
+    const err = new Error("tenantId is required");
+    err.statusCode = 400;
+    err.code = "TENANT_ID_REQUIRED";
+    throw err;
+  }
+
+  const settings = await LicenseSettings.findOne({ tenantId: tid });
+  if (!settings) {
+    const err = new Error("Tenant not found");
+    err.statusCode = 404;
+    err.code = "TENANT_NOT_FOUND";
+    throw err;
+  }
+
+  return settings;
+}
+
+async function rollbackFailedAdminTenantProvisioning(tenantId) {
+  const tid = String(tenantId || "").trim();
+  if (!tid) return;
+
+  await Promise.all([
+    LicenseSettings.deleteOne({ tenantId: tid }),
+    OnboardingStatus.deleteOne({ tenantId: tid }),
+    OnboardingReview.deleteOne({ tenantId: tid }),
+    LicenseAuditLog.deleteMany({ "target.tenantId": tid }),
+  ]);
+}
+
 /* =========================================================
    SUBSCRIPTION (GET OR CREATE — TENANT SAFE)
 ========================================================= */
@@ -689,6 +747,8 @@ const CONTROL_PLANE_API_SECRET = String(process.env.CONTROL_PLANE_API_SECRET || 
 const CONTROL_PLANE_TIMEOUT_MS = Number(process.env.CONTROL_PLANE_TIMEOUT_MS || 8000);
 const VONAGE_API_SIGNATURE_SECRET =
   process.env.VONAGE_API_SIGNATURE_SECRET || "";
+const WEBHOOK_CONTEXT_SECRET =
+  String(process.env.WEBHOOK_CONTEXT_SECRET || process.env.JWT_SECRET || "").trim();
 const VONAGE_SIGNED_WEBHOOKS_REQUIRED =
   !OFFLINE_MODE &&
   (
@@ -777,6 +837,14 @@ let callerId =
 let vonageApplicationId = process.env.VONAGE_APPLICATION_ID || "";
 
 let forwardTo = process.env.FORWARD_TO_NUMBER || "";
+const VONAGE_GLOBAL_ENV_KEYS = [
+  "VONAGE_API_KEY",
+  "VONAGE_API_SECRET",
+  "VONAGE_APPLICATION_ID",
+];
+const VONAGE_GLOBAL_ENV_PARTIALLY_CONFIGURED = VONAGE_GLOBAL_ENV_KEYS.some(
+  (name) => String(process.env[name] || "").trim().length > 0
+);
 /* -------------------------
    REQUIRED ENV CHECKS
 -------------------------- */
@@ -852,15 +920,17 @@ if (!OFFLINE_MODE && IS_PRODUCTION) {
         ),
     "CORS_ORIGIN must contain only HTTPS production origins"
   );
-  ensureProductionEnv("VONAGE_API_KEY", process.env.VONAGE_API_KEY);
-  ensureProductionEnv("VONAGE_API_SECRET", process.env.VONAGE_API_SECRET);
-  ensureProductionEnv(
-    "VONAGE_APPLICATION_ID",
-    process.env.VONAGE_APPLICATION_ID,
-    (value) => /^[0-9a-f-]{36}$/i.test(value),
-    "VONAGE_APPLICATION_ID must be a valid UUID in production"
-  );
-  ensureProductionEnv("VONAGE_PRIVATE_KEY_PATH", process.env.VONAGE_PRIVATE_KEY_PATH);
+  if (VONAGE_GLOBAL_ENV_PARTIALLY_CONFIGURED) {
+    ensureProductionEnv("VONAGE_API_KEY", process.env.VONAGE_API_KEY);
+    ensureProductionEnv("VONAGE_API_SECRET", process.env.VONAGE_API_SECRET);
+    ensureProductionEnv(
+      "VONAGE_APPLICATION_ID",
+      process.env.VONAGE_APPLICATION_ID,
+      (value) => /^[0-9a-f-]{36}$/i.test(value),
+      "VONAGE_APPLICATION_ID must be a valid UUID in production"
+    );
+    ensureProductionEnv("VONAGE_PRIVATE_KEY_PATH", process.env.VONAGE_PRIVATE_KEY_PATH);
+  }
   ensureProductionEnv("VONAGE_API_SIGNATURE_SECRET", process.env.VONAGE_API_SIGNATURE_SECRET);
   ensureProductionEnv(
     "SUPPORT_PROVIDER_WEBHOOK_SECRET",
@@ -1529,7 +1599,121 @@ function extractBearerToken(headerValue = "") {
   return match ? match[1].trim() : raw;
 }
 
-function verifyVonageSignedWebhook(req, res, next) {
+function createVonageWebhookContextToken(payload = {}) {
+  if (!WEBHOOK_CONTEXT_SECRET) return "";
+
+  return jwt.sign(
+    {
+      tenantId: String(payload.tenantId || "").trim(),
+      callId: String(payload.callId || "").trim(),
+      target: String(payload.target || "").trim(),
+      type: "vonage_callback_context",
+    },
+    WEBHOOK_CONTEXT_SECRET,
+    {
+      algorithm: "HS256",
+      expiresIn: "2h",
+      issuer: "vynce",
+      audience: "vonage-webhook",
+    }
+  );
+}
+
+function verifyVonageWebhookContextToken(token = "") {
+  if (!WEBHOOK_CONTEXT_SECRET || !token) return null;
+
+  return jwt.verify(String(token || "").trim(), WEBHOOK_CONTEXT_SECRET, {
+    algorithms: ["HS256"],
+    issuer: "vynce",
+    audience: "vonage-webhook",
+  });
+}
+
+async function findVerifiedTelephonySettingsForTenant(tenantId) {
+  const tid = String(tenantId || "").trim();
+  if (!tid) return null;
+
+  return TelephonySettings.findOne({
+    tenantId: tid,
+    verified: true,
+  })
+    .sort({ updatedAt: -1 })
+    .lean()
+    .catch(() => null);
+}
+
+async function resolveVonageWebhookVerificationContext(req) {
+  const queryTenantId = String(req.query?.tenantId || "").trim();
+  const queryCallId = String(req.query?.callId || "").trim();
+  const queryTarget = String(req.query?.target || "").trim();
+  const contextToken = String(req.query?.ctx || "").trim();
+
+  let signedContext = null;
+  if (contextToken) {
+    signedContext = verifyVonageWebhookContextToken(contextToken);
+  }
+
+  const tenantIdFromContext = String(signedContext?.tenantId || "").trim();
+  const callIdFromContext = String(signedContext?.callId || "").trim();
+
+  if (queryTenantId && tenantIdFromContext && queryTenantId !== tenantIdFromContext) {
+    const err = new Error("Webhook tenant context mismatch");
+    err.statusCode = 401;
+    err.code = "WEBHOOK_CONTEXT_MISMATCH";
+    throw err;
+  }
+
+  if (queryCallId && callIdFromContext && queryCallId !== callIdFromContext) {
+    const err = new Error("Webhook call context mismatch");
+    err.statusCode = 401;
+    err.code = "WEBHOOK_CONTEXT_MISMATCH";
+    throw err;
+  }
+
+  if (queryTarget && signedContext?.target && queryTarget !== signedContext.target) {
+    const err = new Error("Webhook target context mismatch");
+    err.statusCode = 401;
+    err.code = "WEBHOOK_CONTEXT_MISMATCH";
+    throw err;
+  }
+
+  let tenantId = tenantIdFromContext || queryTenantId;
+  const callId = callIdFromContext || queryCallId;
+
+  if (!tenantId && callId && mongoose.Types.ObjectId.isValid(callId)) {
+    const callById = await Call.findById(callId).select("tenantId").lean().catch(() => null);
+    tenantId = String(callById?.tenantId || "").trim();
+  }
+
+  if (!tenantId) {
+    const callUuid = String(
+      req.body?.call_uuid || req.body?.uuid || req.body?.conversation_uuid || ""
+    ).trim();
+    if (callUuid) {
+      const callByUuid = await Call.findOne({ uuid: callUuid }).select("tenantId").lean().catch(() => null);
+      tenantId = String(callByUuid?.tenantId || "").trim();
+    }
+  }
+
+  const telephonySettings = await findVerifiedTelephonySettingsForTenant(tenantId);
+  const expectedApplicationId = String(
+    telephonySettings?.applicationId || vonageApplicationId || ""
+  ).trim();
+  const expectedSignatureSecret = String(
+    telephonySettings?.webhookSecret || VONAGE_API_SIGNATURE_SECRET || ""
+  ).trim();
+
+  return {
+    tenantId,
+    callId,
+    signedContext,
+    telephonySettings,
+    expectedApplicationId,
+    expectedSignatureSecret,
+  };
+}
+
+async function verifyVonageSignedWebhook(req, res, next) {
   if (!VONAGE_SIGNED_WEBHOOKS_REQUIRED || OFFLINE_MODE) {
     return next();
   }
@@ -1544,14 +1728,22 @@ function verifyVonageSignedWebhook(req, res, next) {
       });
     }
 
-    const decoded = jwt.verify(token, VONAGE_API_SIGNATURE_SECRET, {
+    const verificationContext = await resolveVonageWebhookVerificationContext(req);
+    if (!verificationContext.expectedSignatureSecret) {
+      return res.status(401).json({
+        success: false,
+        message: "Vonage webhook secret is not configured for this tenant",
+      });
+    }
+
+    const decoded = jwt.verify(token, verificationContext.expectedSignatureSecret, {
       algorithms: ["HS256", "HS384", "HS512"],
     });
 
     if (
       decoded.application_id &&
-      vonageApplicationId &&
-      decoded.application_id !== vonageApplicationId
+      verificationContext.expectedApplicationId &&
+      decoded.application_id !== verificationContext.expectedApplicationId
     ) {
       return res.status(401).json({
         success: false,
@@ -1574,6 +1766,7 @@ function verifyVonageSignedWebhook(req, res, next) {
     }
 
     req.vonageWebhookClaims = decoded;
+    req.vonageWebhookContext = verificationContext;
     return next();
   } catch (err) {
     logWarnDebug("Vonage webhook signature verification failed:", err.message);
@@ -3031,6 +3224,8 @@ app.post("/api/admin/tenants", authMiddleware, adminOnly, async (req, res) => {
     const requestedPlan = String(req.body?.plan || "professional")
       .trim()
       .toLowerCase();
+    const issueLicense = req.body?.issueLicense === true;
+    const issueOptions = req.body?.issueOptions || {};
 
     const TENANT_ID_REGEX = /^[a-z0-9][a-z0-9_-]{2,63}$/;
 
@@ -3152,9 +3347,108 @@ app.post("/api/admin/tenants", authMiddleware, adminOnly, async (req, res) => {
       },
     });
 
+    let issuedLicense = null;
+    if (issueLicense) {
+      const requestedMaxActivations = issueOptions?.maxActivations;
+      const requestedIncludedUsers = issueOptions?.includedUsers;
+      const requestedExtraSeats = issueOptions?.extraSeats;
+      const requestedExpiresAt = issueOptions?.expiresAt;
+      const requestedReason = String(
+        issueOptions?.reason || "Tenant commercial onboarding"
+      ).trim();
+      const requestedPerformedBy = String(
+        issueOptions?.performedBy || req.user?.email || "vynce-admin"
+      ).trim();
+
+      const normalizedMaxActivations = Number.isFinite(Number(requestedMaxActivations))
+        ? Math.max(1, Math.floor(Number(requestedMaxActivations)))
+        : 1;
+      const normalizedIncludedUsers = Number.isFinite(Number(requestedIncludedUsers))
+        ? Math.max(1, Math.floor(Number(requestedIncludedUsers)))
+        : 1;
+      const normalizedExtraSeats = Number.isFinite(Number(requestedExtraSeats))
+        ? Math.max(0, Math.floor(Number(requestedExtraSeats)))
+        : 0;
+
+      let normalizedExpiresAt = null;
+      if (requestedExpiresAt) {
+        const parsed = new Date(requestedExpiresAt);
+        if (Number.isNaN(parsed.getTime())) {
+          await rollbackFailedAdminTenantProvisioning(rawTenantId);
+          return res.status(400).json({
+            success: false,
+            code: "INVALID_LICENSE_EXPIRY",
+            message: "expiresAt must be a valid ISO date when provided.",
+          });
+        }
+        normalizedExpiresAt = parsed.toISOString();
+      }
+
+      const issueResult = await issueTenantLicenseKey(rawTenantId, {
+        plan: normalizedPlan,
+        maxActivations: normalizedMaxActivations,
+        includedUsers: normalizedIncludedUsers,
+        extraSeats: normalizedExtraSeats,
+        expiresAt: normalizedExpiresAt,
+        performedBy: requestedPerformedBy || "vynce-admin",
+        reason: requestedReason || "Tenant commercial onboarding",
+        source: "vynce-admin-license",
+      });
+
+      if (!issueResult.success) {
+        await rollbackFailedAdminTenantProvisioning(rawTenantId);
+        const statusCode = Number(issueResult.statusCode || 500);
+        return res.status(statusCode).json({
+          success: false,
+          code: issueResult.code || "LICENSE_ISSUE_FAILED",
+          message: normalizeIssueErrorMessage(issueResult),
+        });
+      }
+
+      await LicenseAuditLog.create({
+        action: "LICENSE_ISSUED",
+        performedBy: {
+          userId: req.user._id,
+          email: req.user.email,
+          role: req.user.role,
+        },
+        target: {
+          companyName,
+          tenantId: rawTenantId,
+          licenseId: issueResult.licenseId || settings.client?.licenseId || `vynce-${rawTenantId}`,
+        },
+        before: {
+          plan: normalizedPlan,
+        },
+        after: {
+          plan: normalizedPlan,
+          maxActivations: normalizedMaxActivations,
+          includedUsers: normalizedIncludedUsers,
+          extraSeats: normalizedExtraSeats,
+          expiresAt: normalizedExpiresAt,
+          reason: requestedReason || "Tenant commercial onboarding",
+        },
+      });
+
+      issuedLicense = {
+        tenantId: rawTenantId,
+        licenseId: issueResult.licenseId,
+        licenseKey: issueResult.licenseKey,
+        oneTimeDisplay: true,
+        issuedAt: new Date().toISOString(),
+        plan: normalizedPlan,
+        maxActivations: normalizedMaxActivations,
+        includedUsers: normalizedIncludedUsers,
+        extraSeats: normalizedExtraSeats,
+        expiresAt: normalizedExpiresAt,
+      };
+    }
+
     return res.status(201).json({
       success: true,
-      message: "Tenant created successfully.",
+      message: issueLicense
+        ? "Tenant created and license key issued successfully."
+        : "Tenant created successfully.",
       data: {
         tenant: {
           tenantId: rawTenantId,
@@ -3165,6 +3459,7 @@ app.post("/api/admin/tenants", authMiddleware, adminOnly, async (req, res) => {
           status: getTenantLicenseStatus(settings),
           isEnabled: !!settings.isEnabled,
         },
+        issuedLicense,
       },
     });
   } catch (err) {
@@ -3231,7 +3526,8 @@ app.post(
       apiSecret,
       applicationId,
       privateKey,
-      preferredNumber
+      preferredNumber,
+      webhookSecret,
     } = req.body;
 
     const persistFailure = async (verification) => {
@@ -3272,6 +3568,36 @@ app.post(
         });
       }
 
+      const normalizedWebhookSecret = String(webhookSecret || "").trim();
+      const effectiveWebhookSecret = normalizedWebhookSecret || VONAGE_API_SIGNATURE_SECRET;
+
+      if (VONAGE_SIGNED_WEBHOOKS_REQUIRED && !effectiveWebhookSecret) {
+        const verification = buildVonageVerificationPayload({
+          ok: false,
+          code: "MISSING_WEBHOOK_SECRET",
+          message: "A Vonage webhook signature secret is required for production webhook verification.",
+          checkedAt,
+          account: {
+            apiKeyMasked: maskValue(apiKey),
+            applicationId,
+          },
+          checks: {
+            credentials: true,
+            application: true,
+            numbers: false,
+            preferredNumber: false,
+            webhookSignature: false,
+          },
+        });
+        await persistFailure(verification);
+
+        return res.status(400).json({
+          success: false,
+          message: verification.message,
+          verification,
+        });
+      }
+
       // Initialize Vonage client
       const vonage = new Vonage({
         apiKey,
@@ -3303,6 +3629,7 @@ app.post(
             application: true,
             numbers: false,
             preferredNumber: false,
+            webhookSignature: !!effectiveWebhookSecret,
           },
         });
         await persistFailure(verification);
@@ -3336,6 +3663,7 @@ app.post(
             application: true,
             numbers: true,
             preferredNumber: false,
+            webhookSignature: !!effectiveWebhookSecret,
           },
           context: {
             preferredNumber,
@@ -3366,6 +3694,7 @@ app.post(
           application: true,
           numbers: true,
           preferredNumber: true,
+          webhookSignature: !!effectiveWebhookSecret,
         },
       });
 
@@ -3385,6 +3714,7 @@ app.post(
     apiSecret,
     applicationId,
     privateKey, // encrypt later
+    webhookSecret: effectiveWebhookSecret,
     outboundNumber: `+${matchedNumber.msisdn}`,
     verified: true,
     verification,
@@ -3440,6 +3770,7 @@ app.post(
           application: false,
           numbers: false,
           preferredNumber: false,
+          webhookSignature: Boolean(webhookSecret || VONAGE_API_SIGNATURE_SECRET),
         },
         context: {
           httpStatus,
@@ -3484,10 +3815,13 @@ app.get("/api/ready", (req, res) => {
     ? Number.isFinite(CONTROL_PLANE_TIMEOUT_MS) && CONTROL_PLANE_TIMEOUT_MS > 0
     : true;
   const vonageConfigured =
-    Boolean(process.env.VONAGE_API_KEY) &&
-    Boolean(process.env.VONAGE_API_SECRET) &&
-    Boolean(process.env.VONAGE_APPLICATION_ID) &&
-    Boolean(process.env.VONAGE_PRIVATE_KEY_PATH);
+    !VONAGE_GLOBAL_ENV_PARTIALLY_CONFIGURED ||
+    (
+      Boolean(process.env.VONAGE_API_KEY) &&
+      Boolean(process.env.VONAGE_API_SECRET) &&
+      Boolean(process.env.VONAGE_APPLICATION_ID) &&
+      Boolean(process.env.VONAGE_PRIVATE_KEY_PATH)
+    );
   const signedWebhookSecretConfigured = Boolean(VONAGE_API_SIGNATURE_SECRET);
   const supportWebhookSecretConfigured = Boolean(SUPPORT_PROVIDER_WEBHOOK_SECRET);
   const licenseConfigured = USE_CONTROL_PLANE_SOURCE
@@ -3528,7 +3862,21 @@ app.get("/api/ready", (req, res) => {
 ========================================================= */
 
 /* ---------------- REGISTER ---------------- */
+async function rollbackFailedTenantRegistration({ userId = null, tenantId = "" } = {}) {
+  const tid = String(tenantId || "").trim();
+
+  await Promise.allSettled([
+    userId ? User.deleteOne({ _id: userId }) : Promise.resolve(),
+    tid ? LicenseSettings.deleteOne({ tenantId: tid }) : Promise.resolve(),
+    tid ? OnboardingStatus.deleteMany({ tenantId: tid }) : Promise.resolve(),
+    tid ? OnboardingReview.deleteMany({ tenantId: tid }) : Promise.resolve(),
+  ]);
+}
+
 app.post("/api/auth/register", async (req, res) => {
+  let createdUser = null;
+  let createdTenantId = "";
+
   try {
     let { firstName, lastName, email, password, plan, company } = req.body;
 
@@ -3559,6 +3907,7 @@ app.post("/api/auth/register", async (req, res) => {
 
     // ✅ Always generate a unique tenantId
     const tenantId = `tenant_${crypto.randomUUID()}`;
+    createdTenantId = tenantId;
 
     const user = await User.create({
       firstName,
@@ -3571,6 +3920,7 @@ app.post("/api/auth/register", async (req, res) => {
       role: "customer",
       isSuperAdmin: false,
     });
+    createdUser = user;
 
     // ✅ Ensure LicenseSettings exists (admin enable/disable will work instantly)
   // ✅ Ensure LicenseSettings exists (admin enable/disable will work instantly)
@@ -3595,13 +3945,26 @@ try {
     changed = true;
   }
   if (changed) await ls.save();
-  await syncTenantLicenseState(tenantId, {
+  const licenseSync = await syncTenantLicenseState(tenantId, {
     plan: ls.plan,
     isEnabled: ls.isEnabled,
     source: "vynce-register",
   });
+
+  if (!licenseSync?.success) {
+    const provisioningError = new Error(
+      licenseSync?.message ||
+        "Commercial provisioning could not be completed for this tenant."
+    );
+    provisioningError.statusCode =
+      licenseSync?.statusCode ||
+      (licenseSync?.code === "CONTROL_PLANE_NOT_CONFIGURED" ? 503 : 502);
+    provisioningError.code =
+      licenseSync?.code || "COMMERCIAL_PROVISIONING_FAILED";
+    throw provisioningError;
+  }
 } catch (e) {
-  logErrorDebug("⚠️ LicenseSettings init failed (non-blocking):", e.message);
+  throw e;
 }
 
 try {
@@ -3649,10 +4012,22 @@ return res.json({
 });
 
   } catch (err) {
+    if (createdUser?._id || createdTenantId) {
+      try {
+        await rollbackFailedTenantRegistration({
+          userId: createdUser?._id || null,
+          tenantId: createdTenantId,
+        });
+      } catch (rollbackErr) {
+        console.error("Registration rollback failed:", rollbackErr);
+      }
+    }
+
     console.error("Register error:", err);
-    return res.status(500).json({
+    return res.status(err?.statusCode || 500).json({
       success: false,
-      message: "Server error during registration",
+      code: err?.code || "REGISTRATION_FAILED",
+      message: err?.message || "Server error during registration",
     });
   }
 });
@@ -4646,7 +5021,7 @@ app.post("/api/admin/license/issue", authMiddleware, adminOnly, async (req, res)
   try {
     const tenantId = resolveTenantId(req);
     const settings = await ensureTenantSuspensionState(
-      await getOrCreateLicenseSettings(tenantId)
+      await getExistingLicenseSettingsOrThrow(tenantId)
     );
 
     const {
@@ -4758,9 +5133,10 @@ app.post("/api/admin/license/issue", authMiddleware, adminOnly, async (req, res)
     });
   } catch (err) {
     console.error("Admin license issue error:", err);
-    return res.status(500).json({
+    return res.status(err?.statusCode || 500).json({
       success: false,
-      message: "Failed to issue license key",
+      code: err?.code || "LICENSE_ISSUE_FAILED",
+      message: err?.message || "Failed to issue license key",
     });
   }
 });
@@ -4769,7 +5145,7 @@ app.post("/api/admin/license", authMiddleware, adminOnly, async (req, res) => {
   try {
     const tenantId = resolveTenantId(req);
     const settings = await ensureTenantSuspensionState(
-      await getOrCreateLicenseSettings(tenantId)
+      await getExistingLicenseSettingsOrThrow(tenantId)
     );
 
     const before = settings.toObject();
@@ -4879,7 +5255,7 @@ app.post("/api/admin/license", authMiddleware, adminOnly, async (req, res) => {
 
     await settings.save();
 
-    await syncTenantLicenseState(settings.tenantId, {
+    const licenseSyncResult = await syncTenantLicenseState(settings.tenantId, {
       plan: settings.plan,
       isEnabled: settings.isEnabled,
       reasonCode: settings.suspendReasonCode || "",
@@ -4888,16 +5264,58 @@ app.post("/api/admin/license", authMiddleware, adminOnly, async (req, res) => {
       source: "vynce-admin-license",
     });
 
+    if (licenseSyncResult?.success === false) {
+      await LicenseSettings.findByIdAndUpdate(settings._id, {
+        isEnabled: before.isEnabled,
+        disabledUntil: before.disabledUntil || null,
+        suspendReason: before.suspendReason || "",
+        suspendReasonCode: before.suspendReasonCode || "",
+        suspendReasonText: before.suspendReasonText || "",
+        plan: before.plan,
+        limits: before.limits || {},
+        updatedBy: before.updatedBy || null,
+      });
+
+      return res.status(Number(licenseSyncResult.statusCode || 503)).json({
+        success: false,
+        code: licenseSyncResult.code || "CONTROL_PLANE_SYNC_FAILED",
+        message:
+          licenseSyncResult.message ||
+          "Control plane rejected the tenant license change. No local changes were kept.",
+      });
+    }
+
     if (typeof action === "string" && action.trim()) {
       const normalizedAction = action.trim().toLowerCase();
       if (["suspend", "temporary_suspend", "reenable"].includes(normalizedAction)) {
-        await syncTenantActivationState(settings.tenantId, {
+        const activationSyncResult = await syncTenantActivationState(settings.tenantId, {
           action: normalizedAction,
           reasonCode: settings.suspendReasonCode || "",
           reasonText: settings.suspendReasonText || "",
           disabledUntil: settings.disabledUntil || null,
           source: "vynce-admin-license",
         });
+
+        if (activationSyncResult?.success === false) {
+          await LicenseSettings.findByIdAndUpdate(settings._id, {
+            isEnabled: before.isEnabled,
+            disabledUntil: before.disabledUntil || null,
+            suspendReason: before.suspendReason || "",
+            suspendReasonCode: before.suspendReasonCode || "",
+            suspendReasonText: before.suspendReasonText || "",
+            plan: before.plan,
+            limits: before.limits || {},
+            updatedBy: before.updatedBy || null,
+          });
+
+          return res.status(Number(activationSyncResult.statusCode || 503)).json({
+            success: false,
+            code: activationSyncResult.code || "CONTROL_PLANE_SYNC_FAILED",
+            message:
+              activationSyncResult.message ||
+              "Control plane rejected the activation change. No local changes were kept.",
+          });
+        }
       }
     }
 
@@ -4956,9 +5374,10 @@ app.post("/api/admin/license", authMiddleware, adminOnly, async (req, res) => {
     });
   } catch (err) {
     console.error("Admin license update error:", err);
-    return res.status(500).json({
+    return res.status(err?.statusCode || 500).json({
       success: false,
-      message: "Failed to update license",
+      code: err?.code || "LICENSE_UPDATE_FAILED",
+      message: err?.message || "Failed to update license",
     });
   }
 });
@@ -4968,7 +5387,7 @@ app.get("/api/admin/license", authMiddleware, adminOnly, async (req, res) => {
   try {
     const tenantId = resolveTenantId(req);
     const settings = await ensureTenantSuspensionState(
-      await getOrCreateLicenseSettings(tenantId)
+      await getExistingLicenseSettingsOrThrow(tenantId)
     );
 
     return res.json({
@@ -4977,9 +5396,10 @@ app.get("/api/admin/license", authMiddleware, adminOnly, async (req, res) => {
     });
   } catch (err) {
     console.error("Admin license fetch error:", err);
-    return res.status(500).json({
+    return res.status(err?.statusCode || 500).json({
       success: false,
-      message: "Failed to load license",
+      code: err?.code || "LICENSE_FETCH_FAILED",
+      message: err?.message || "Failed to load license",
     });
   }
 });
@@ -6067,8 +6487,8 @@ app.post("/api/end-call", authMiddleware, async (req, res) => {
 // THIS IS THE MAIN VOICE WEBHOOK FOR INSTRUCTIONS (NCCO)
 // It MUST live at /api/voice to match the answer_url we build.
 app.get("/api/voice", verifyVonageSignedWebhook, (req, res) => {
-  const callId = req.query.callId;
-  const targetNumber = req.query.target;
+  const callId = req.query.callId || req.vonageWebhookContext?.callId;
+  const targetNumber = req.query.target || req.vonageWebhookContext?.signedContext?.target;
   void writeVonageWebhookAudit("voice", req, {
     callId: String(callId || ""),
     targetNumber: String(targetNumber || ""),
@@ -6769,6 +7189,7 @@ function buildVonageVerificationPayload({
       application: !!checks.application,
       numbers: !!checks.numbers,
       preferredNumber: !!checks.preferredNumber,
+      webhookSignature: !!checks.webhookSignature,
     },
   };
 }
@@ -7242,5 +7663,3 @@ app.get("/api/agent/license", authMiddleware, async (req, res) => {
     });
   }
 });
-
-
