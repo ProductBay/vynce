@@ -3482,14 +3482,14 @@ app.get("/api/admin/tenants", authMiddleware, adminOnly, async (req, res) => {
     await Promise.all(rows.map((row) => ensureTenantSuspensionState(row)));
 
     const tenants = await Promise.all(
-      rows.map(async (doc) => {
+           rows.map(async (doc) => {
         const tenantId = doc.tenantId || "default";
         let accessState = null;
-try {
-  accessState = await getTenantAccessSnapshot({ tenantId });
-} catch (snapErr) {
-  console.warn(`[admin/tenants] accessState failed for ${tenantId}:`, snapErr.message);
-}
+        try {
+          accessState = await getTenantAccessSnapshot({ tenantId });
+        } catch (snapErr) {
+          console.warn(`[admin/tenants] accessState failed for ${tenantId}:`, snapErr.message);
+        }
 
         return {
           tenantId,
@@ -3504,9 +3504,9 @@ try {
           disabledUntil: doc.disabledUntil || null,
           updatedAt: doc.updatedAt,
           createdAt: doc.createdAt,
-          commercial: accessState.commercial,
-          commercialBlocked: !accessState.effectiveAccess.canLogin,
-          effectiveAccess: accessState.effectiveAccess,
+          commercial: accessState?.commercial || null,
+          commercialBlocked: accessState ? !accessState.effectiveAccess.canLogin : false,
+          effectiveAccess: accessState?.effectiveAccess || null,
         };
       })
     );
