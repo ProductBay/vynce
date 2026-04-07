@@ -12,14 +12,49 @@ const __dirname = path.dirname(__filename);
 const OFFLINE_MODE =
   (process.env.OFFLINE_MODE || "false").toLowerCase() === "true";
 
-  
+function normalizeKey(value) {
+  const normalized = String(value || "").trim();
+
+  if (!normalized) {
+    return "";
+  }
+
+  return normalized.replace(/\\n/g, "\n");
+}
+
 // -----------------------------
 // CONFIG
 // -----------------------------
-const PUBLIC_KEY = fs.readFileSync(
+const PUBLIC_KEY_CANDIDATES = [
+  String(process.env.LICENSE_PUBLIC_KEY_PATH || "").trim(),
+  path.join(__dirname, "../license_public.pem"),
   path.join(__dirname, "../../license_public.pem"),
-  "utf8"
-);
+].filter(Boolean);
+
+let cachedPublicKey = null;
+
+function loadPublicKey() {
+  if (cachedPublicKey !== null) {
+    return cachedPublicKey;
+  }
+
+  const inlinePublicKey = normalizeKey(process.env.LICENSE_PUBLIC_KEY);
+
+  if (inlinePublicKey) {
+    cachedPublicKey = inlinePublicKey;
+    return cachedPublicKey;
+  }
+
+  const publicKeyPath = PUBLIC_KEY_CANDIDATES.find((candidate) => fs.existsSync(candidate));
+
+  if (!publicKeyPath) {
+    cachedPublicKey = "";
+    return cachedPublicKey;
+  }
+
+  cachedPublicKey = fs.readFileSync(publicKeyPath, "utf8");
+  return cachedPublicKey;
+}
 
 const LICENSE_SERVER = process.env.LICENSE_SERVER_URL;
 const HEARTBEAT_INTERVAL_MS = 1000 * 60 * 5; // 5 minutes
@@ -43,7 +78,15 @@ const licenseState = {
 // LOCAL VERIFICATION
 // -----------------------------
 function verifyLocal(token) {
-  return jwt.verify(token, PUBLIC_KEY, {
+  const publicKey = loadPublicKey();
+
+  if (!publicKey) {
+    throw new Error(
+      `LICENSE_PUBLIC_KEY or LICENSE_PUBLIC_KEY_PATH is required for offline JWT verification. Checked: ${PUBLIC_KEY_CANDIDATES.join(", ")}`
+    );
+  }
+
+  return jwt.verify(token, publicKey, {
     algorithms: ["RS256"],
     issuer: ISSUER,
     audience: AUDIENCE,
@@ -55,8 +98,8 @@ function verifyLocal(token) {
 // -----------------------------
 async function runHeartbeat() {
   if (OFFLINE_MODE) {
-  return;
-}
+    return;
+  }
 
   if (!LICENSE_SERVER) {
     // Heartbeat disabled, rely on local + grace
@@ -92,24 +135,24 @@ async function runHeartbeat() {
       throw new Error(data?.error || "heartbeat_rejected");
     }
   } catch (err) {
-  const now = Date.now();
-  const withinGrace =
-    typeof licenseState.lastOkAt === "number" &&
-    now - licenseState.lastOkAt < GRACE_PERIOD_MS;
+    const now = Date.now();
+    const withinGrace =
+      typeof licenseState.lastOkAt === "number" &&
+      now - licenseState.lastOkAt < GRACE_PERIOD_MS;
 
-  // 🔐 DO NOT invalidate if no license server configured
-  if (!LICENSE_SERVER) {
-    return;
+    // Do not invalidate if no license server configured
+    if (!LICENSE_SERVER) {
+      return;
+    }
+
+    licenseState.valid = withinGrace;
+
+    console.warn(
+      `⚠️ License heartbeat failed (${err.message}) — ${
+        withinGrace ? "grace active" : "license invalid"
+      }`
+    );
   }
-
-  licenseState.valid = withinGrace;
-
-  console.warn(
-    `⚠️ License heartbeat failed (${err.message}) — ${
-      withinGrace ? "grace active" : "license invalid"
-    }`
-  );
-}
 }
 
 // -----------------------------
@@ -123,45 +166,51 @@ export function startLicenseManager({ token, activationId }) {
     return;
   }
 
+  if (!loadPublicKey()) {
+    console.warn(
+      `⚠️ License manager not started — missing LICENSE_PUBLIC_KEY or readable key file. Checked: ${PUBLIC_KEY_CANDIDATES.join(", ")}`
+    );
+    return;
+  }
+
   licenseState.token = token;
   licenseState.activationId = activationId;
-// -----------------------------
-// LICENSE INITIALIZATION
-// -----------------------------
 
-// 1️⃣ Initial local verification (offline-safe)
-try {
-  const decoded = verifyLocal(token);
+  // -----------------------------
+  // LICENSE INITIALIZATION
+  // -----------------------------
 
-  // Mark license as valid
-  licenseState.valid = true;
-licenseState.payload = {
-  ...decoded,
-  status: "active",
-  usage: {
-    callsUsed: decoded?.usage?.callsUsed ?? 0,
-  },
-};
-licenseState.lastOkAt = Date.now();
+  // Initial local verification (offline-safe)
+  try {
+    const decoded = verifyLocal(token);
 
-  
-  console.log("✅ License verified locally and activated");
-} catch (err) {
-  licenseState.valid = false;
-  global.currentLicensePayload = null;
+    licenseState.valid = true;
+    licenseState.payload = {
+      ...decoded,
+      status: "active",
+      usage: {
+        callsUsed: decoded?.usage?.callsUsed ?? 0,
+      },
+    };
+    licenseState.lastOkAt = Date.now();
 
-  console.warn(
-    "⚠️ License verification failed at startup:",
-    err.message
-  );
-  return;
-}
+    console.log("✅ License verified locally and activated");
+  } catch (err) {
+    licenseState.valid = false;
+    global.currentLicensePayload = null;
 
-// 2️⃣ Immediate heartbeat (do NOT wait 5 min)
-runHeartbeat();
+    console.warn(
+      "⚠️ License verification failed at startup:",
+      err.message
+    );
+    return;
+  }
 
-// 3️⃣ Background heartbeat
-setInterval(runHeartbeat, HEARTBEAT_INTERVAL_MS);
+  // Immediate heartbeat
+  runHeartbeat();
+
+  // Background heartbeat
+  setInterval(runHeartbeat, HEARTBEAT_INTERVAL_MS);
 }
 
 // -----------------------------
