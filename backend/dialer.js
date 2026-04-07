@@ -3533,12 +3533,12 @@ const tenants = await Promise.all(
 
 return res.json({ success: true, tenants });
   } catch (err) {
-    console.error("Tenant list error:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to load tenants",
-    });
-  }
+console.error("Tenant list error:", err);
+return res.status(500).json({
+success: false,
+message: "Failed to load tenants",
+});
+}
 });
 
 app.post(
