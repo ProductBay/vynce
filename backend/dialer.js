@@ -3472,46 +3472,66 @@ app.post("/api/admin/tenants", authMiddleware, adminOnly, async (req, res) => {
 });
 
 app.get("/api/admin/tenants", authMiddleware, adminOnly, async (req, res) => {
-  try {
-    const rows = await LicenseSettings.find({})
-      .select(
-        "tenantId client plan isEnabled suspendReason suspendReasonCode suspendReasonText disabledUntil updatedAt createdAt"
-      )
-      .sort({ updatedAt: -1 });
+try {
+const includeCommercial =
+String(req.query?.includeCommercial || "false").toLowerCase() === "true";
+  const withTimeout = (promise, ms, label = "operation") =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(label + " timed out after " + ms + "ms")), ms)
+    ),
+  ]);
 
-    await Promise.all(rows.map((row) => ensureTenantSuspensionState(row)));
+const rows = await LicenseSettings.find({})
+  .select(
+    "tenantId client plan isEnabled suspendReason suspendReasonCode suspendReasonText disabledUntil updatedAt createdAt"
+  )
+  .sort({ updatedAt: -1 });
 
-    const tenants = await Promise.all(
-           rows.map(async (doc) => {
-        const tenantId = doc.tenantId || "default";
-        let accessState = null;
-        try {
-          accessState = await getTenantAccessSnapshot({ tenantId });
-        } catch (snapErr) {
-          console.warn(`[admin/tenants] accessState failed for ${tenantId}:`, snapErr.message);
-        }
+await Promise.all(rows.map((row) => ensureTenantSuspensionState(row)));
 
-        return {
-          tenantId,
-          companyName: doc.client?.companyName || "Unknown",
-          licenseId: doc.client?.licenseId || `vynce-${tenantId}`,
-          contactEmail: doc.client?.contactEmail || "",
-          plan: doc.plan || "standard",
-          isEnabled: !!doc.isEnabled,
-          status: getTenantLicenseStatus(doc),
-          reasonCode: doc.suspendReasonCode || "",
-          reasonText: doc.suspendReasonText || "",
-          disabledUntil: doc.disabledUntil || null,
-          updatedAt: doc.updatedAt,
-          createdAt: doc.createdAt,
-          commercial: accessState?.commercial || null,
-          commercialBlocked: accessState ? !accessState.effectiveAccess.canLogin : false,
-          effectiveAccess: accessState?.effectiveAccess || null,
-        };
-      })
-    );
+const tenants = await Promise.all(
+  rows.map(async (doc) => {
+    const tenantId = doc.tenantId || "default";
+    let accessState = null;
 
-    return res.json({ success: true, tenants });
+    if (includeCommercial) {
+      try {
+        accessState = await withTimeout(
+          getTenantAccessSnapshot({ tenantId }),
+          2500,
+          "tenant access snapshot (" + tenantId + ")"
+        );
+      } catch (snapErr) {
+        console.warn(
+          "[admin/tenants] accessState failed for " + tenantId + ":",
+          snapErr.message
+        );
+      }
+    }
+
+    return {
+      tenantId,
+      companyName: doc.client?.companyName || "Unknown",
+      licenseId: doc.client?.licenseId || ("vynce-" + tenantId),
+      contactEmail: doc.client?.contactEmail || "",
+      plan: doc.plan || "standard",
+      isEnabled: !!doc.isEnabled,
+      status: getTenantLicenseStatus(doc),
+      reasonCode: doc.suspendReasonCode || "",
+      reasonText: doc.suspendReasonText || "",
+      disabledUntil: doc.disabledUntil || null,
+      updatedAt: doc.updatedAt,
+      createdAt: doc.createdAt,
+      commercial: accessState?.commercial || null,
+      commercialBlocked: accessState ? !accessState.effectiveAccess.canLogin : false,
+      effectiveAccess: accessState?.effectiveAccess || null,
+    };
+  })
+);
+
+return res.json({ success: true, tenants });
   } catch (err) {
     console.error("Tenant list error:", err);
     return res.status(500).json({
