@@ -22,6 +22,7 @@ function normalizeKey(value) {
   return normalized.replace(/\\n/g, "\n");
 }
 
+  
 // -----------------------------
 // CONFIG
 // -----------------------------
@@ -98,8 +99,8 @@ function verifyLocal(token) {
 // -----------------------------
 async function runHeartbeat() {
   if (OFFLINE_MODE) {
-    return;
-  }
+  return;
+}
 
   if (!LICENSE_SERVER) {
     // Heartbeat disabled, rely on local + grace
@@ -135,24 +136,24 @@ async function runHeartbeat() {
       throw new Error(data?.error || "heartbeat_rejected");
     }
   } catch (err) {
-    const now = Date.now();
-    const withinGrace =
-      typeof licenseState.lastOkAt === "number" &&
-      now - licenseState.lastOkAt < GRACE_PERIOD_MS;
+  const now = Date.now();
+  const withinGrace =
+    typeof licenseState.lastOkAt === "number" &&
+    now - licenseState.lastOkAt < GRACE_PERIOD_MS;
 
-    // Do not invalidate if no license server configured
-    if (!LICENSE_SERVER) {
-      return;
-    }
-
-    licenseState.valid = withinGrace;
-
-    console.warn(
-      `⚠️ License heartbeat failed (${err.message}) — ${
-        withinGrace ? "grace active" : "license invalid"
-      }`
-    );
+  // 🔐 DO NOT invalidate if no license server configured
+  if (!LICENSE_SERVER) {
+    return;
   }
+
+  licenseState.valid = withinGrace;
+
+  console.warn(
+    `⚠️ License heartbeat failed (${err.message}) — ${
+      withinGrace ? "grace active" : "license invalid"
+    }`
+  );
+}
 }
 
 // -----------------------------
@@ -175,42 +176,43 @@ export function startLicenseManager({ token, activationId }) {
 
   licenseState.token = token;
   licenseState.activationId = activationId;
+// -----------------------------
+// LICENSE INITIALIZATION
+// -----------------------------
 
-  // -----------------------------
-  // LICENSE INITIALIZATION
-  // -----------------------------
+// 1️⃣ Initial local verification (offline-safe)
+try {
+  const decoded = verifyLocal(token);
 
-  // Initial local verification (offline-safe)
-  try {
-    const decoded = verifyLocal(token);
+  // Mark license as valid
+  licenseState.valid = true;
+licenseState.payload = {
+  ...decoded,
+  status: "active",
+  usage: {
+    callsUsed: decoded?.usage?.callsUsed ?? 0,
+  },
+};
+licenseState.lastOkAt = Date.now();
 
-    licenseState.valid = true;
-    licenseState.payload = {
-      ...decoded,
-      status: "active",
-      usage: {
-        callsUsed: decoded?.usage?.callsUsed ?? 0,
-      },
-    };
-    licenseState.lastOkAt = Date.now();
+  
+  console.log("✅ License verified locally and activated");
+} catch (err) {
+  licenseState.valid = false;
+  global.currentLicensePayload = null;
 
-    console.log("✅ License verified locally and activated");
-  } catch (err) {
-    licenseState.valid = false;
-    global.currentLicensePayload = null;
+  console.warn(
+    "⚠️ License verification failed at startup:",
+    err.message
+  );
+  return;
+}
 
-    console.warn(
-      "⚠️ License verification failed at startup:",
-      err.message
-    );
-    return;
-  }
+// 2️⃣ Immediate heartbeat (do NOT wait 5 min)
+runHeartbeat();
 
-  // Immediate heartbeat
-  runHeartbeat();
-
-  // Background heartbeat
-  setInterval(runHeartbeat, HEARTBEAT_INTERVAL_MS);
+// 3️⃣ Background heartbeat
+setInterval(runHeartbeat, HEARTBEAT_INTERVAL_MS);
 }
 
 // -----------------------------
