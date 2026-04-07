@@ -3484,7 +3484,12 @@ app.get("/api/admin/tenants", authMiddleware, adminOnly, async (req, res) => {
     const tenants = await Promise.all(
       rows.map(async (doc) => {
         const tenantId = doc.tenantId || "default";
-        const accessState = await getTenantAccessSnapshot({ tenantId });
+        let accessState = null;
+try {
+  accessState = await getTenantAccessSnapshot({ tenantId });
+} catch (snapErr) {
+  console.warn(`[admin/tenants] accessState failed for ${tenantId}:`, snapErr.message);
+}
 
         return {
           tenantId,
