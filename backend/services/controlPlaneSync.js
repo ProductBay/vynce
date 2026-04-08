@@ -109,6 +109,29 @@ function buildUnavailableCommercialState(tenantId, reason, code = "CONTROL_PLANE
   };
 }
 
+function buildMissingCommercialState(tenantId, reason = "Tenant license not found") {
+  return {
+    tenantId,
+    licenseActive: false,
+    commercialStatus: "missing_license",
+    activationValid: false,
+    plan: "unknown",
+    includedUsers: 0,
+    extraSeats: 0,
+    maxActivations: 0,
+    activeActivations: 0,
+    canProvisionUser: false,
+    blockedReason: reason,
+    activationId: null,
+    installId: null,
+    signedStatusToken: null,
+    degraded: false,
+    graceActive: false,
+    degradedReason: "",
+    checkedAt: new Date().toISOString(),
+  };
+}
+
 async function requestControlPlane(method, path, body = null) {
   const tenantId = body?.tenantId || null;
   const activationId = body?.activationId || null;
@@ -159,6 +182,15 @@ export async function fetchTenantCommercialStatus(tenantId, options = {}) {
       commercialCache.set(tid, { value: normalized, cachedAt: nowMs() });
       return normalized;
     } catch (err) {
+      if (err?.statusCode === 404) {
+        const missing = buildMissingCommercialState(
+          tid,
+          err?.message || "Tenant license not found"
+        );
+        commercialCache.set(tid, { value: missing, cachedAt: nowMs() });
+        return missing;
+      }
+
       if (cached?.value && !cached.value.degraded && nowMs() - cached.cachedAt <= DEGRADE_GRACE_MS) {
         const staleGrace = {
           ...cached.value,
