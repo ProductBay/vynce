@@ -8,6 +8,7 @@ import {
 const CACHE_TTL_MS = 60 * 1000;
 const DEGRADE_GRACE_MS = Math.max(0, Number(process.env.CONTROL_PLANE_GRACE_MS || 300000));
 const commercialCache = new Map();
+const commercialInflightRequests = new Map();
 
 function toNumber(value, fallback) {
   const parsed = Number(value);
@@ -21,6 +22,16 @@ function nowMs() {
 function isCacheFresh(entry) {
   if (!entry) return false;
   return nowMs() - entry.cachedAt < CACHE_TTL_MS;
+}
+
+function hasStableCommercialAccess(value) {
+  return (
+    value &&
+    value.degraded !== true &&
+    value.licenseActive === true &&
+    String(value.commercialStatus || "").toLowerCase() === "active" &&
+    value.activationValid !== false
+  );
 }
 
 function getControlPlaneData(raw) {
@@ -121,8 +132,12 @@ export async function fetchTenantCommercialStatus(tenantId, options = {}) {
   const tid = String(tenantId || "default").trim() || "default";
 
   const cached = commercialCache.get(tid);
-  if (!options.forceRefresh && isCacheFresh(cached)) {
+  if (!options.forceRefresh && isCacheFresh(cached) && hasStableCommercialAccess(cached.value)) {
     return cached.value;
+  }
+
+  if (commercialInflightRequests.has(tid)) {
+    return commercialInflightRequests.get(tid);
   }
 
   if (!controlPlaneClient.isConfigured()) {
@@ -135,35 +150,42 @@ export async function fetchTenantCommercialStatus(tenantId, options = {}) {
     return degraded;
   }
 
-  try {
-    const response = await fetchTenantLicenseSummary(tid);
+  const request = (async () => {
+    try {
+      const response = await fetchTenantLicenseSummary(tid);
 
-    const normalized = normalizeCommercialState(response, tid);
-    normalized.graceActive = false;
-    commercialCache.set(tid, { value: normalized, cachedAt: nowMs() });
-    return normalized;
-  } catch (err) {
-    if (cached?.value && !cached.value.degraded && nowMs() - cached.cachedAt <= DEGRADE_GRACE_MS) {
-      const staleGrace = {
-        ...cached.value,
-        degraded: true,
-        graceActive: true,
-        degradedReason: err?.message || "Control plane unavailable",
-        degradedCode: err?.code || "CONTROL_PLANE_UNAVAILABLE",
-        checkedAt: new Date().toISOString(),
-      };
-      commercialCache.set(tid, { value: staleGrace, cachedAt: nowMs() });
-      return staleGrace;
+      const normalized = normalizeCommercialState(response, tid);
+      normalized.graceActive = false;
+      commercialCache.set(tid, { value: normalized, cachedAt: nowMs() });
+      return normalized;
+    } catch (err) {
+      if (cached?.value && !cached.value.degraded && nowMs() - cached.cachedAt <= DEGRADE_GRACE_MS) {
+        const staleGrace = {
+          ...cached.value,
+          degraded: true,
+          graceActive: true,
+          degradedReason: err?.message || "Control plane unavailable",
+          degradedCode: err?.code || "CONTROL_PLANE_UNAVAILABLE",
+          checkedAt: new Date().toISOString(),
+        };
+        commercialCache.set(tid, { value: staleGrace, cachedAt: nowMs() });
+        return staleGrace;
+      }
+
+      const degraded = buildUnavailableCommercialState(
+        tid,
+        err?.message || "Control plane unavailable",
+        err?.code || "CONTROL_PLANE_UNAVAILABLE"
+      );
+      commercialCache.set(tid, { value: degraded, cachedAt: nowMs() });
+      return degraded;
+    } finally {
+      commercialInflightRequests.delete(tid);
     }
+  })();
 
-    const degraded = buildUnavailableCommercialState(
-      tid,
-      err?.message || "Control plane unavailable",
-      err?.code || "CONTROL_PLANE_UNAVAILABLE"
-    );
-    commercialCache.set(tid, { value: degraded, cachedAt: nowMs() });
-    return degraded;
-  }
+  commercialInflightRequests.set(tid, request);
+  return request;
 }
 
 export async function fetchTenantSeatEntitlement(tenantId, options = {}) {
