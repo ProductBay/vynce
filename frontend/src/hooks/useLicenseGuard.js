@@ -35,6 +35,57 @@ function getOnboardingReason(calling = {}) {
   return null;
 }
 
+async function buildLicenseErrorDetails(res) {
+  const status = Number(res?.status || 0);
+  const fallbackMessage = status
+    ? `License check failed (${status})`
+    : "Unable to verify license. Please try again later.";
+
+  if (!res) {
+    return {
+      code: "LICENSE_STATUS_UNAVAILABLE",
+      status,
+      message: fallbackMessage,
+    };
+  }
+
+  const contentType = String(res.headers?.get("content-type") || "");
+  if (contentType.includes("application/json")) {
+    try {
+      const payload = await res.json();
+      const message =
+        payload?.message ||
+        payload?.error?.message ||
+        payload?.data?.message ||
+        fallbackMessage;
+      const code =
+        payload?.code ||
+        payload?.error?.code ||
+        payload?.data?.code ||
+        "";
+
+      return {
+        code,
+        status,
+        message: code ? `${message} [${code}]` : message,
+        payload,
+      };
+    } catch {
+      return {
+        code: "",
+        status,
+        message: fallbackMessage,
+      };
+    }
+  }
+
+  return {
+    code: "",
+    status,
+    message: fallbackMessage,
+  };
+}
+
 export function useLicenseGuard() {
   const { authFetch, user, loading: authLoading } = useAuth();
 
@@ -47,6 +98,8 @@ export function useLicenseGuard() {
     onboarding: null,
     calling: null,
     mode: null,
+    code: null,
+    status: null,
     reason: null,
   });
 
@@ -63,6 +116,8 @@ export function useLicenseGuard() {
         onboarding: null,
         calling: null,
         mode: null,
+        code: "NOT_AUTHENTICATED",
+        status: 401,
         reason: "Not authenticated.",
       });
       return;
@@ -75,7 +130,12 @@ export function useLicenseGuard() {
         const res = await fetchBootstrapLicenseStatus(authFetch, user);
 
         if (!res || !res.ok) {
-          throw new Error(`License check failed (${res?.status})`);
+          const details = await buildLicenseErrorDetails(res);
+          const error = new Error(details.message);
+          error.code = details.code;
+          error.status = details.status;
+          error.payload = details.payload;
+          throw error;
         }
 
         const contentType = res.headers.get("content-type") || "";
@@ -103,6 +163,8 @@ export function useLicenseGuard() {
             onboarding,
             calling,
             mode,
+            code: "CONTROL_PLANE_UNAVAILABLE",
+            status: 503,
             reason:
               commercial?.degradedReason ||
               "Licensing service is temporarily unavailable. Please contact support.",
@@ -120,7 +182,11 @@ export function useLicenseGuard() {
             onboarding,
             calling,
             mode,
-            reason: "Commercial access is blocked for this tenant. Contact support.",
+            code: "COMMERCIAL_ACCESS_BLOCKED",
+            status: 403,
+            reason:
+              payload?.commercial?.blockedReason ||
+              "Commercial access is blocked for this tenant. Contact support.",
           });
           return;
         }
@@ -142,11 +208,19 @@ export function useLicenseGuard() {
           onboarding,
           calling,
           mode,
+          code: null,
+          status: 200,
           reason,
         });
       } catch (err) {
         console.error("[LicenseGuard]", err);
         if (!mounted) return;
+
+        const errorCode = String(err?.code || "").trim();
+        const errorStatus = Number.isFinite(Number(err?.status)) ? Number(err.status) : null;
+        const errorMessage =
+          String(err?.message || "").trim() ||
+          "Unable to verify license. Please try again later.";
 
         setState({
           loading: false,
@@ -157,7 +231,9 @@ export function useLicenseGuard() {
           onboarding: null,
           calling: null,
           mode: null,
-          reason: "Unable to verify license. Please try again later.",
+          code: errorCode || "LICENSE_STATUS_CHECK_FAILED",
+          status: errorStatus,
+          reason: errorCode ? `${errorMessage}` : errorMessage,
         });
       }
     };
