@@ -298,8 +298,28 @@ function getTenantLicenseStatus(settings) {
   return "active";
 }
 
+function getOnboardingOverrideState(settings) {
+  const enabled = settings?.onboardingOverride?.enabled === true;
+  const expiresAtRaw = settings?.onboardingOverride?.expiresAt || null;
+  const expiresAt = expiresAtRaw ? new Date(expiresAtRaw) : null;
+  const active =
+    enabled &&
+    (!expiresAt || (Number.isFinite(expiresAt.getTime()) && expiresAt.getTime() > Date.now()));
+
+  return {
+    active,
+    enabled,
+    reason: String(settings?.onboardingOverride?.reason || "").trim(),
+    enabledAt: settings?.onboardingOverride?.enabledAt || null,
+    expiresAt: expiresAtRaw || null,
+    enabledBy: settings?.onboardingOverride?.enabledBy || null,
+  };
+}
+
 async function ensureTenantSuspensionState(settings) {
   if (!settings) return settings;
+
+  let changed = false;
 
   if (
     settings.isEnabled === false &&
@@ -311,6 +331,24 @@ async function ensureTenantSuspensionState(settings) {
     settings.suspendReason = "";
     settings.suspendReasonCode = "";
     settings.suspendReasonText = "";
+    changed = true;
+  }
+
+  const overrideEnabled = settings?.onboardingOverride?.enabled === true;
+  const overrideExpiresAt = settings?.onboardingOverride?.expiresAt
+    ? new Date(settings.onboardingOverride.expiresAt)
+    : null;
+  if (
+    overrideEnabled &&
+    overrideExpiresAt &&
+    Number.isFinite(overrideExpiresAt.getTime()) &&
+    overrideExpiresAt.getTime() <= Date.now()
+  ) {
+    settings.onboardingOverride.enabled = false;
+    changed = true;
+  }
+
+  if (changed) {
     await settings.save();
   }
 
@@ -342,6 +380,7 @@ function getTenantCallingModeState(settings) {
 function buildTenantLicenseResponse(settings) {
   const status = getTenantLicenseStatus(settings);
   const mode = getTenantCallingModeState(settings);
+  const onboardingOverride = getOnboardingOverrideState(settings);
 
   return {
     tenantId: settings.tenantId,
@@ -354,6 +393,7 @@ function buildTenantLicenseResponse(settings) {
     disabledUntil: settings.disabledUntil || null,
     plan: settings.plan,
     mode,
+    onboardingOverride,
     limits: settings.limits || {},
     updatedAt: settings.updatedAt,
     updatedBy: settings.updatedBy || null,
@@ -2426,10 +2466,11 @@ function buildOnboardingPayload(progressDoc, reviewDoc) {
   };
 }
 
-function buildCallingPermissions(onboarding) {
+function buildCallingPermissions(onboarding, options = {}) {
   const reviewStatus = onboarding?.review?.status || "draft";
   const testCallCompleted = !!onboarding?.steps?.testCallCompleted;
-  const canGoLive = !!onboarding?.canGoLive;
+  const canGoLive =
+    !!onboarding?.canGoLive || Boolean(options?.onboardingOverrideActive);
 
   return {
     canSingleCall: canGoLive || !testCallCompleted,
@@ -2469,9 +2510,13 @@ function buildOnboardingBlockedError(onboarding, mode) {
 }
 
 async function enforceOnboardingForCalling({ tenantId, userId, mode }) {
-  const onboarding = await getTenantOnboardingPayload({ tenantId, userId });
+  const [onboarding, settings] = await Promise.all([
+    getTenantOnboardingPayload({ tenantId, userId }),
+    ensureTenantSuspensionState(await getOrCreateLicenseSettings(tenantId)),
+  ]);
+  const onboardingOverride = getOnboardingOverrideState(settings);
 
-  if (onboarding.canGoLive) {
+  if (onboarding.canGoLive || onboardingOverride.active) {
     return { onboarding, isTestCall: false };
   }
 
@@ -2503,15 +2548,18 @@ async function buildTenantOperationalState({ tenantId, userId, onboarding = null
   const tenantOperationalStatus = resolvedSettings?.isEnabled
     ? "active"
     : getTenantLicenseStatus(resolvedSettings);
+  const onboardingOverride = getOnboardingOverrideState(resolvedSettings);
 
   const onboardingApproved =
-    resolvedOnboarding?.review?.status === "approved" &&
-    Boolean(resolvedOnboarding?.review?.approvedForLiveCalling);
+    onboardingOverride.active ||
+    (resolvedOnboarding?.review?.status === "approved" &&
+      Boolean(resolvedOnboarding?.review?.approvedForLiveCalling));
   const telephonyVerified = telephonySettings?.verification?.status === "verified";
 
   return {
     tenantId: tid,
     onboardingApproved,
+    onboardingOverride,
     tenantOperationalStatus,
     telephonyVerified,
     canGoLive: Boolean(onboardingApproved && telephonyVerified),
@@ -4534,7 +4582,7 @@ app.get("/api/admin/tenant-monitoring", authMiddleware, adminOnly, async (req, r
 
     const [license, onboardingStatus, onboardingReview, telephonySettings] =
       await Promise.all([
-        getOrCreateLicenseSettings(tenantId),
+        ensureTenantSuspensionState(await getOrCreateLicenseSettings(tenantId)),
         getOrCreateOnboardingStatus({ tenantId }),
         getOrCreateOnboardingReview(tenantId),
         TelephonySettings.findOne({ tenantId }).lean().catch(() => null),
@@ -4614,6 +4662,9 @@ app.get("/api/admin/tenant-monitoring", authMiddleware, adminOnly, async (req, r
         },
         commercial: accessState?.commercial || null,
         effectiveAccess: accessState?.effectiveAccess || null,
+        onboardingOverride:
+          accessState?.operational?.onboardingOverride ||
+          getOnboardingOverrideState(license),
         onboarding,
         seats,
         telephony: {
@@ -5254,10 +5305,18 @@ app.post("/api/admin/license", authMiddleware, adminOnly, async (req, res) => {
       suspendReasonText,
       reasonCode,
       reasonText,
+      overrideMinutes,
+      overrideExpiresAt,
+      overridePermanent,
       disabledUntil,
       plan,
       limits,
     } = req.body;
+
+    const normalizedAction =
+      typeof action === "string" && action.trim()
+        ? action.trim().toLowerCase()
+        : "";
 
     const normalizedReasonCode = normalizeSuspendReasonCode(
       reasonCode || suspendReasonCode
@@ -5266,9 +5325,7 @@ app.post("/api/admin/license", authMiddleware, adminOnly, async (req, res) => {
       reasonText || suspendReasonText || suspendReason || ""
     ).trim();
 
-    if (typeof action === "string" && action.trim()) {
-      const normalizedAction = action.trim().toLowerCase();
-
+    if (normalizedAction) {
       if (normalizedAction === "suspend") {
         if (!normalizedReasonCode) {
           return res.status(400).json({
@@ -5313,6 +5370,41 @@ app.post("/api/admin/license", authMiddleware, adminOnly, async (req, res) => {
         settings.suspendReasonCode = normalizedReasonCode;
         settings.suspendReasonText = normalizedReasonText;
         settings.suspendReason = normalizedReasonText || normalizedReasonCode;
+      } else if (normalizedAction === "override_onboarding") {
+        const minutes = Number.isFinite(Number(overrideMinutes))
+          ? Math.max(5, Math.min(1440, Math.floor(Number(overrideMinutes))))
+          : 60;
+        let expiresAt = null;
+
+        if (overridePermanent === true) {
+          expiresAt = null;
+        } else if (overrideExpiresAt) {
+          const parsedOverrideExpiry = new Date(overrideExpiresAt);
+          if (!Number.isNaN(parsedOverrideExpiry.getTime())) {
+            expiresAt = parsedOverrideExpiry;
+          } else {
+            expiresAt = new Date(Date.now() + minutes * 60 * 1000);
+          }
+        } else {
+          expiresAt = new Date(Date.now() + minutes * 60 * 1000);
+        }
+
+        settings.onboardingOverride = settings.onboardingOverride || {};
+        settings.onboardingOverride.enabled = true;
+        settings.onboardingOverride.enabledAt = new Date();
+        settings.onboardingOverride.expiresAt = expiresAt;
+        settings.onboardingOverride.reason =
+          normalizedReasonText || "Admin override for dashboard validation";
+        settings.onboardingOverride.enabledBy = {
+          userId: req.user._id,
+          email: req.user.email,
+          role: req.user.role,
+        };
+      } else if (normalizedAction === "clear_onboarding_override") {
+        settings.onboardingOverride = settings.onboardingOverride || {};
+        settings.onboardingOverride.enabled = false;
+        settings.onboardingOverride.expiresAt = null;
+        settings.onboardingOverride.reason = "";
       } else {
         return res.status(400).json({
           success: false,
@@ -5351,39 +5443,46 @@ app.post("/api/admin/license", authMiddleware, adminOnly, async (req, res) => {
 
     await settings.save();
 
-    const licenseSyncResult = await syncTenantLicenseState(settings.tenantId, {
-      plan: settings.plan,
-      isEnabled: settings.isEnabled,
-      reasonCode: settings.suspendReasonCode || "",
-      reasonText: settings.suspendReasonText || "",
-      disabledUntil: settings.disabledUntil || null,
-      source: "vynce-admin-license",
-    });
+    const requiresCommercialSync =
+      Boolean(typeof isEnabled === "boolean") ||
+      Boolean(typeof plan === "string") ||
+      Boolean(limits?.maxCallsPerDay !== undefined) ||
+      ["suspend", "temporary_suspend", "reenable"].includes(normalizedAction);
 
-    if (licenseSyncResult?.success === false) {
-      await LicenseSettings.findByIdAndUpdate(settings._id, {
-        isEnabled: before.isEnabled,
-        disabledUntil: before.disabledUntil || null,
-        suspendReason: before.suspendReason || "",
-        suspendReasonCode: before.suspendReasonCode || "",
-        suspendReasonText: before.suspendReasonText || "",
-        plan: before.plan,
-        limits: before.limits || {},
-        updatedBy: before.updatedBy || null,
+    if (requiresCommercialSync) {
+      const licenseSyncResult = await syncTenantLicenseState(settings.tenantId, {
+        plan: settings.plan,
+        isEnabled: settings.isEnabled,
+        reasonCode: settings.suspendReasonCode || "",
+        reasonText: settings.suspendReasonText || "",
+        disabledUntil: settings.disabledUntil || null,
+        source: "vynce-admin-license",
       });
 
-      return res.status(Number(licenseSyncResult.statusCode || 503)).json({
-        success: false,
-        code: licenseSyncResult.code || "CONTROL_PLANE_SYNC_FAILED",
-        message:
-          licenseSyncResult.message ||
-          "Control plane rejected the tenant license change. No local changes were kept.",
-      });
+      if (licenseSyncResult?.success === false) {
+        await LicenseSettings.findByIdAndUpdate(settings._id, {
+          isEnabled: before.isEnabled,
+          disabledUntil: before.disabledUntil || null,
+          suspendReason: before.suspendReason || "",
+          suspendReasonCode: before.suspendReasonCode || "",
+          suspendReasonText: before.suspendReasonText || "",
+          plan: before.plan,
+          limits: before.limits || {},
+          onboardingOverride: before.onboardingOverride || {},
+          updatedBy: before.updatedBy || null,
+        });
+
+        return res.status(Number(licenseSyncResult.statusCode || 503)).json({
+          success: false,
+          code: licenseSyncResult.code || "CONTROL_PLANE_SYNC_FAILED",
+          message:
+            licenseSyncResult.message ||
+            "Control plane rejected the tenant license change. No local changes were kept.",
+        });
+      }
     }
 
-    if (typeof action === "string" && action.trim()) {
-      const normalizedAction = action.trim().toLowerCase();
-      if (["suspend", "temporary_suspend", "reenable"].includes(normalizedAction)) {
+    if (["suspend", "temporary_suspend", "reenable"].includes(normalizedAction)) {
         const activationSyncResult = await syncTenantActivationState(settings.tenantId, {
           action: normalizedAction,
           reasonCode: settings.suspendReasonCode || "",
@@ -5401,6 +5500,7 @@ app.post("/api/admin/license", authMiddleware, adminOnly, async (req, res) => {
             suspendReasonText: before.suspendReasonText || "",
             plan: before.plan,
             limits: before.limits || {},
+            onboardingOverride: before.onboardingOverride || {},
             updatedBy: before.updatedBy || null,
           });
 
@@ -5412,7 +5512,6 @@ app.post("/api/admin/license", authMiddleware, adminOnly, async (req, res) => {
               "Control plane rejected the activation change. No local changes were kept.",
           });
         }
-      }
     }
 
     const after = settings.toObject();
@@ -5422,12 +5521,17 @@ app.post("/api/admin/license", authMiddleware, adminOnly, async (req, res) => {
 
     // 🔍 Determine audit action
     let auditAction = "LICENSE_UPDATED";
-    if (typeof action === "string" && action.trim()) {
-      const normalizedAction = action.trim().toLowerCase();
+    if (normalizedAction) {
       if (normalizedAction === "suspend") auditAction = "TENANT_SUSPENDED";
       if (normalizedAction === "reenable") auditAction = "TENANT_REENABLED";
       if (normalizedAction === "temporary_suspend") {
         auditAction = "TENANT_TEMP_SUSPENDED";
+      }
+      if (normalizedAction === "override_onboarding") {
+        auditAction = "TENANT_ONBOARDING_OVERRIDE_ENABLED";
+      }
+      if (normalizedAction === "clear_onboarding_override") {
+        auditAction = "TENANT_ONBOARDING_OVERRIDE_CLEARED";
       }
     } else if (before.isEnabled !== after.isEnabled) {
       auditAction = after.isEnabled ? "LICENSE_ENABLED" : "LICENSE_DISABLED";
@@ -5465,6 +5569,10 @@ app.post("/api/admin/license", authMiddleware, adminOnly, async (req, res) => {
             ? "Tenant re-enabled"
             : auditAction === "TENANT_TEMP_SUSPENDED"
               ? "Tenant temporarily suspended"
+              : auditAction === "TENANT_ONBOARDING_OVERRIDE_ENABLED"
+                ? "Onboarding override enabled"
+                : auditAction === "TENANT_ONBOARDING_OVERRIDE_CLEARED"
+                  ? "Onboarding override cleared"
               : "License settings updated",
       data: buildTenantLicenseResponse(settings),
     });
@@ -5954,7 +6062,9 @@ app.get(["/api/license/status", "/api/license/status-legacy"], authMiddleware, (
       onboarding,
       tenantSettings,
     });
-    const calling = buildCallingPermissions(onboarding);
+    const calling = buildCallingPermissions(onboarding, {
+      onboardingOverrideActive: accessState?.operational?.onboardingOverride?.active,
+    });
 
     return res.json({
       success: true,
@@ -5978,6 +6088,7 @@ app.get(["/api/license/status", "/api/license/status-legacy"], authMiddleware, (
           tenantOperationalStatus: accessState.operational.tenantOperationalStatus,
           telephonyVerified: accessState.operational.telephonyVerified,
           canGoLive: accessState.operational.canGoLive,
+          onboardingOverride: accessState.operational.onboardingOverride,
         },
         effectiveAccess: accessState.effectiveAccess,
         mode: getTenantCallingModeState(tenantSettings),
@@ -7759,3 +7870,7 @@ app.get("/api/agent/license", authMiddleware, async (req, res) => {
     });
   }
 });
+
+
+
+
