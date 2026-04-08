@@ -4966,7 +4966,6 @@ app.post(
 app.get(
   "/api/settings",
   authMiddleware,
-  requireRole("admin", "superadmin"),
   async (req, res) => {
     try {
       let settings = await Settings.findOne({ singleton: true });
@@ -5030,9 +5029,19 @@ app.get(
 app.post(
   "/api/settings",
   authMiddleware,
-  requireRole("admin", "superadmin"),
   async (req, res) => {
     try {
+      const canManageGlobalSettings =
+        req.user?.isSuperAdmin === true || req.user?.role === "admin";
+
+      if (!canManageGlobalSettings) {
+        return res.status(403).json({
+          success: false,
+          message:
+            "Global dialer settings are managed by admins. Tenant onboarding can continue from Vonage verification on this page.",
+        });
+      }
+
       const {
         callerId: newCallerId,
         vonageApplicationId: newVonageApplicationId,
