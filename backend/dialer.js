@@ -2574,16 +2574,36 @@ async function getTenantAccessSnapshot({
   tenantSettings = null,
 }) {
   const tid = String(tenantId || "default").trim() || "default";
+  const resolvedTenantSettings =
+    tenantSettings || ensureTenantSuspensionState(await getOrCreateLicenseSettings(tid));
 
-  const [commercial, operational] = await Promise.all([
-    fetchTenantCommercialStatus(tid, { forceRefresh: forceCommercialRefresh }),
-    buildTenantOperationalState({
-      tenantId: tid,
-      userId,
-      onboarding,
-      tenantSettings,
-    }),
-  ]);
+  let commercial = await fetchTenantCommercialStatus(tid, {
+    forceRefresh: forceCommercialRefresh,
+  });
+
+  // Self-heal production tenants that exist locally but are missing
+  // their commercial license record in the control plane.
+  if (
+    commercial?.commercialStatus === "missing_license" &&
+    resolvedTenantSettings?.isEnabled !== false
+  ) {
+    const syncResult = await syncTenantLicenseState(tid, {
+      plan: resolvedTenantSettings?.plan || "professional",
+      isEnabled: true,
+      source: "vynce-access-bootstrap",
+    });
+
+    if (syncResult?.success) {
+      commercial = await fetchTenantCommercialStatus(tid, { forceRefresh: true });
+    }
+  }
+
+  const operational = await buildTenantOperationalState({
+    tenantId: tid,
+    userId,
+    onboarding,
+    tenantSettings: resolvedTenantSettings,
+  });
 
   const effectiveAccess = buildTenantAccessState({ commercial, operational });
 
@@ -7872,7 +7892,6 @@ app.get("/api/agent/license", authMiddleware, async (req, res) => {
     });
   }
 });
-
 
 
 
