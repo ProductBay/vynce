@@ -1,7 +1,8 @@
 import axios from "axios";
+import { API_URL, resolveApiUrl } from "./api";
 
 const apiClient = axios.create({
-  baseURL: "/api",
+  baseURL: API_URL,
   withCredentials: true,
 });
 
@@ -30,7 +31,7 @@ apiClient.interceptors.response.use(
 
       try {
         const refreshResponse = await axios.post(
-          "/api/auth/refresh",
+          resolveApiUrl("/api/auth/refresh"),
           {},
           { withCredentials: true }
         );
