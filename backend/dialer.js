@@ -3348,6 +3348,7 @@ app.post("/api/admin/tenants", authMiddleware, adminOnly, async (req, res) => {
     });
 
     let issuedLicense = null;
+    let licenseIssueError = null;
     if (issueLicense) {
       const requestedMaxActivations = issueOptions?.maxActivations;
       const requestedIncludedUsers = issueOptions?.includedUsers;
@@ -3374,7 +3375,6 @@ app.post("/api/admin/tenants", authMiddleware, adminOnly, async (req, res) => {
       if (requestedExpiresAt) {
         const parsed = new Date(requestedExpiresAt);
         if (Number.isNaN(parsed.getTime())) {
-          await rollbackFailedAdminTenantProvisioning(rawTenantId);
           return res.status(400).json({
             success: false,
             code: "INVALID_LICENSE_EXPIRY",
@@ -3396,59 +3396,60 @@ app.post("/api/admin/tenants", authMiddleware, adminOnly, async (req, res) => {
       });
 
       if (!issueResult.success) {
-        await rollbackFailedAdminTenantProvisioning(rawTenantId);
-        const statusCode = Number(issueResult.statusCode || 500);
-        return res.status(statusCode).json({
-          success: false,
+        licenseIssueError = {
           code: issueResult.code || "LICENSE_ISSUE_FAILED",
           message: normalizeIssueErrorMessage(issueResult),
+          statusCode: Number(issueResult.statusCode || 500),
+        };
+      } else {
+        await LicenseAuditLog.create({
+          action: "LICENSE_ISSUED",
+          performedBy: {
+            userId: req.user._id,
+            email: req.user.email,
+            role: req.user.role,
+          },
+          target: {
+            companyName,
+            tenantId: rawTenantId,
+            licenseId: issueResult.licenseId || settings.client?.licenseId || `vynce-${rawTenantId}`,
+          },
+          before: {
+            plan: normalizedPlan,
+          },
+          after: {
+            plan: normalizedPlan,
+            maxActivations: normalizedMaxActivations,
+            includedUsers: normalizedIncludedUsers,
+            extraSeats: normalizedExtraSeats,
+            expiresAt: normalizedExpiresAt,
+            reason: requestedReason || "Tenant commercial onboarding",
+          },
         });
-      }
 
-      await LicenseAuditLog.create({
-        action: "LICENSE_ISSUED",
-        performedBy: {
-          userId: req.user._id,
-          email: req.user.email,
-          role: req.user.role,
-        },
-        target: {
-          companyName,
+        issuedLicense = {
           tenantId: rawTenantId,
-          licenseId: issueResult.licenseId || settings.client?.licenseId || `vynce-${rawTenantId}`,
-        },
-        before: {
-          plan: normalizedPlan,
-        },
-        after: {
+          licenseId: issueResult.licenseId,
+          licenseKey: issueResult.licenseKey,
+          oneTimeDisplay: true,
+          issuedAt: new Date().toISOString(),
           plan: normalizedPlan,
           maxActivations: normalizedMaxActivations,
           includedUsers: normalizedIncludedUsers,
           extraSeats: normalizedExtraSeats,
           expiresAt: normalizedExpiresAt,
-          reason: requestedReason || "Tenant commercial onboarding",
-        },
-      });
-
-      issuedLicense = {
-        tenantId: rawTenantId,
-        licenseId: issueResult.licenseId,
-        licenseKey: issueResult.licenseKey,
-        oneTimeDisplay: true,
-        issuedAt: new Date().toISOString(),
-        plan: normalizedPlan,
-        maxActivations: normalizedMaxActivations,
-        includedUsers: normalizedIncludedUsers,
-        extraSeats: normalizedExtraSeats,
-        expiresAt: normalizedExpiresAt,
-      };
+        };
+      }
     }
 
     return res.status(201).json({
       success: true,
-      message: issueLicense
-        ? "Tenant created and license key issued successfully."
-        : "Tenant created successfully.",
+      message:
+        issueLicense && issuedLicense
+          ? "Tenant created and license key issued successfully."
+          : issueLicense
+            ? "Tenant created, but license key issuance failed. Retry issuing from tenant details."
+            : "Tenant created successfully.",
       data: {
         tenant: {
           tenantId: rawTenantId,
@@ -3460,6 +3461,7 @@ app.post("/api/admin/tenants", authMiddleware, adminOnly, async (req, res) => {
           isEnabled: !!settings.isEnabled,
         },
         issuedLicense,
+        licenseIssueError,
       },
     });
   } catch (err) {
