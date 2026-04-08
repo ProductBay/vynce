@@ -5114,6 +5114,8 @@ const LicenseAuditSchema = new mongoose.Schema(
         "TENANT_SUSPENDED",
         "TENANT_REENABLED",
         "TENANT_TEMP_SUSPENDED",
+        "TENANT_ONBOARDING_OVERRIDE_ENABLED",
+        "TENANT_ONBOARDING_OVERRIDE_CLEARED",
       ],
       required: true,
     },
