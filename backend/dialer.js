@@ -3472,73 +3472,88 @@ app.post("/api/admin/tenants", authMiddleware, adminOnly, async (req, res) => {
 });
 
 app.get("/api/admin/tenants", authMiddleware, adminOnly, async (req, res) => {
-try {
-const includeCommercial =
-String(req.query?.includeCommercial || "false").toLowerCase() === "true";
-  const withTimeout = (promise, ms, label = "operation") =>
-  Promise.race([
-    promise,
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(label + " timed out after " + ms + "ms")), ms)
-    ),
-  ]);
+  try {
+    const includeCommercial =
+      String(req.query?.includeCommercial || "false").toLowerCase() === "true";
 
-const rows = await LicenseSettings.find({})
-  .select(
-    "tenantId client plan isEnabled suspendReason suspendReasonCode suspendReasonText disabledUntil updatedAt createdAt"
-  )
-  .sort({ updatedAt: -1 });
+    const withTimeout = (promise, ms, label = "operation") =>
+      Promise.race([
+        promise,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(label + " timed out after " + ms + "ms")), ms)
+        ),
+      ]);
 
-await Promise.all(rows.map((row) => ensureTenantSuspensionState(row)));
+    const rows = await LicenseSettings.find({})
+      .select(
+        "tenantId client plan isEnabled suspendReason suspendReasonCode suspendReasonText disabledUntil updatedAt createdAt"
+      )
+      .sort({ updatedAt: -1 });
 
-const tenants = await Promise.all(
-  rows.map(async (doc) => {
-    const tenantId = doc.tenantId || "default";
-    let accessState = null;
+    const normalizedRows = await Promise.all(
+      rows.map(async (row) => {
+        try {
+          return await ensureTenantSuspensionState(row);
+        } catch (e) {
+          console.warn("[admin/tenants] ensureTenantSuspensionState failed:", e?.message || e);
+          return row;
+        }
+      })
+    );
 
-    if (includeCommercial) {
-      try {
-        accessState = await withTimeout(
-          getTenantAccessSnapshot({ tenantId }),
-          2500,
-          "tenant access snapshot (" + tenantId + ")"
-        );
-      } catch (snapErr) {
-        console.warn(
-          "[admin/tenants] accessState failed for " + tenantId + ":",
-          snapErr.message
-        );
-      }
-    }
+    const tenantResults = await Promise.allSettled(
+      normalizedRows.map(async (doc) => {
+        const tenantId = doc?.tenantId || "default";
+        let accessState = null;
 
-    return {
-      tenantId,
-      companyName: doc.client?.companyName || "Unknown",
-      licenseId: doc.client?.licenseId || ("vynce-" + tenantId),
-      contactEmail: doc.client?.contactEmail || "",
-      plan: doc.plan || "standard",
-      isEnabled: !!doc.isEnabled,
-      status: getTenantLicenseStatus(doc),
-      reasonCode: doc.suspendReasonCode || "",
-      reasonText: doc.suspendReasonText || "",
-      disabledUntil: doc.disabledUntil || null,
-      updatedAt: doc.updatedAt,
-      createdAt: doc.createdAt,
-      commercial: accessState?.commercial || null,
-      commercialBlocked: accessState ? !accessState.effectiveAccess.canLogin : false,
-      effectiveAccess: accessState?.effectiveAccess || null,
-    };
-  })
-);
+        if (includeCommercial) {
+          try {
+            accessState = await withTimeout(
+              getTenantAccessSnapshot({ tenantId }),
+              2500,
+              "tenant access snapshot (" + tenantId + ")"
+            );
+          } catch (snapErr) {
+            console.warn(
+              "[admin/tenants] accessState failed for " + tenantId + ":",
+              snapErr?.message || snapErr
+            );
+          }
+        }
 
-return res.json({ success: true, tenants });
+        return {
+          tenantId,
+          companyName: doc?.client?.companyName || "Unknown",
+          licenseId: doc?.client?.licenseId || ("vynce-" + tenantId),
+          contactEmail: doc?.client?.contactEmail || "",
+          plan: doc?.plan || "standard",
+          isEnabled: !!doc?.isEnabled,
+          status: getTenantLicenseStatus(doc),
+          reasonCode: doc?.suspendReasonCode || "",
+          reasonText: doc?.suspendReasonText || "",
+          disabledUntil: doc?.disabledUntil || null,
+          updatedAt: doc?.updatedAt || null,
+          createdAt: doc?.createdAt || null,
+          commercial: accessState?.commercial || null,
+          commercialBlocked: accessState ? !accessState.effectiveAccess.canLogin : false,
+          effectiveAccess: accessState?.effectiveAccess || null,
+        };
+      })
+    );
+
+    const tenants = tenantResults
+      .filter((item) => item.status === "fulfilled")
+      .map((item) => item.value);
+
+    return res.json({ success: true, tenants });
   } catch (err) {
-console.error("Tenant list error:", err);
-return res.status(500).json({
-success: false,
-message: "Failed to load tenants",
-});
-}
+    console.error("Tenant list error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to load tenants",
+      error: err?.message || "unknown_error",
+    });
+  }
 });
 
 app.post(
