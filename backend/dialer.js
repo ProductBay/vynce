@@ -3480,7 +3480,7 @@ app.get("/api/admin/tenants", authMiddleware, adminOnly, async (req, res) => {
       Promise.race([
         promise,
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error(label + " timed out after " + ms + "ms")), ms)
+          setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
         ),
       ]);
 
@@ -3842,6 +3842,46 @@ app.get("/api/health", (req, res) => {
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
   });
+});
+
+/* ---------------- CONTROL PLANE DIAGNOSTIC (admin only) ---------------- */
+app.get("/api/admin/control-plane/status", authMiddleware, adminOnly, async (req, res) => {
+  const { getControlPlaneConfig } = await import("./services/controlPlaneClient.js");
+  const config = getControlPlaneConfig();
+  const configured = Boolean(config.baseUrl && config.apiSecret);
+
+  if (!configured) {
+    return res.status(503).json({
+      success: false,
+      configured: false,
+      baseUrl: config.baseUrl || null,
+      hasSecret: Boolean(config.apiSecret),
+      message: "Control plane is NOT configured on this backend. Set CONTROL_PLANE_BASE_URL and CONTROL_PLANE_ADMIN_SECRET (or CONTROL_PLANE_API_SECRET) in Render environment variables.",
+    });
+  }
+
+  try {
+    const { controlPlaneClient } = await import("./services/controlPlaneClient.js");
+    const result = await controlPlaneClient.request("GET", "/api/health", { timeoutMs: 5000 });
+    return res.json({
+      success: true,
+      configured: true,
+      baseUrl: config.baseUrl,
+      hasSecret: true,
+      reachable: true,
+      controlPlaneResponse: result,
+    });
+  } catch (err) {
+    return res.status(502).json({
+      success: false,
+      configured: true,
+      baseUrl: config.baseUrl,
+      hasSecret: true,
+      reachable: false,
+      error: err?.message || "Control plane unreachable",
+      code: err?.code || "CONTROL_PLANE_UNAVAILABLE",
+    });
+  }
 });
 
 app.get("/api/ready", (req, res) => {
@@ -4490,21 +4530,34 @@ app.get("/api/admin/tenant-monitoring", authMiddleware, adminOnly, async (req, r
       });
     }
 
-    const [license, onboardingStatus, onboardingReview, seats, telephonySettings] =
+    const [license, onboardingStatus, onboardingReview, telephonySettings] =
       await Promise.all([
         getOrCreateLicenseSettings(tenantId),
         getOrCreateOnboardingStatus({ tenantId }),
         getOrCreateOnboardingReview(tenantId),
-        getTenantSeatSnapshot(tenantId),
         TelephonySettings.findOne({ tenantId }).lean().catch(() => null),
       ]);
 
+    let seats = null;
+    try {
+      seats = await Promise.race([
+        getTenantSeatSnapshot(tenantId),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("getTenantSeatSnapshot timed out")), 3000)),
+      ]);
+    } catch (seatErr) {
+      console.warn("[tenant-monitoring] getTenantSeatSnapshot failed for " + tenantId + ":", seatErr?.message);
+    }
+
     const onboarding = buildOnboardingPayload(onboardingStatus, onboardingReview);
-    const accessState = await getTenantAccessSnapshot({
-      tenantId,
-      onboarding,
-      tenantSettings: license,
-    });
+    let accessState = null;
+    try {
+      accessState = await Promise.race([
+        getTenantAccessSnapshot({ tenantId, onboarding, tenantSettings: license }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("getTenantAccessSnapshot timed out")), 3000)),
+      ]);
+    } catch (snapErr) {
+      console.warn("[tenant-monitoring] getTenantAccessSnapshot failed for " + tenantId + ":", snapErr?.message);
+    }
 
     const [recentCalls, supportConversations, totalCalls, activeCalls] = await Promise.all([
       Call.find({ tenantId })
@@ -4557,8 +4610,8 @@ app.get("/api/admin/tenant-monitoring", authMiddleware, adminOnly, async (req, r
           createdAt: license?.createdAt || null,
           updatedAt: license?.updatedAt || null,
         },
-        commercial: accessState.commercial,
-        effectiveAccess: accessState.effectiveAccess,
+        commercial: accessState?.commercial || null,
+        effectiveAccess: accessState?.effectiveAccess || null,
         onboarding,
         seats,
         telephony: {
@@ -4996,6 +5049,7 @@ const LicenseAuditSchema = new mongoose.Schema(
     action: {
       type: String,
       enum: [
+        "TENANT_CREATED",
         "LICENSE_ISSUED",
         "LICENSE_ENABLED",
         "LICENSE_DISABLED",
