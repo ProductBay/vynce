@@ -692,6 +692,28 @@
   background: rgba(56, 189, 248, 0.16);
 }
 
+.tenant-monitoring-link-btn {
+  cursor: pointer;
+  font: inherit;
+}
+
+.tenant-monitoring-link-btn.warning {
+  border-color: rgba(245, 158, 11, 0.28);
+  background: rgba(245, 158, 11, 0.14);
+  color: #fde68a;
+}
+
+.tenant-monitoring-link-btn.warning:hover {
+  border-color: rgba(250, 204, 21, 0.42);
+  background: rgba(245, 158, 11, 0.2);
+}
+
+.tenant-monitoring-link-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .tenant-monitoring-metrics {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
