@@ -1,6 +1,28 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../components/AuthContext";
 
+const bootstrapLicenseChecks = new Map();
+
+function getBootstrapKey(user) {
+  return String(user?.tenantId || user?._id || "default").trim() || "default";
+}
+
+function fetchBootstrapLicenseStatus(authFetch, user) {
+  const bootstrapKey = getBootstrapKey(user);
+  const existingRequest = bootstrapLicenseChecks.get(bootstrapKey);
+
+  if (existingRequest) {
+    return existingRequest;
+  }
+
+  const request = authFetch("/api/license/status").finally(() => {
+    bootstrapLicenseChecks.delete(bootstrapKey);
+  });
+
+  bootstrapLicenseChecks.set(bootstrapKey, request);
+  return request;
+}
+
 function getOnboardingReason(calling = {}) {
   if (calling.requiresApproval && calling.testCallAvailable) {
     return "Onboarding is pending approval. You can place one test call, but bulk/live calling stays locked until an admin approves the tenant.";
@@ -50,7 +72,7 @@ export function useLicenseGuard() {
 
     const checkLicense = async () => {
       try {
-        const res = await authFetch("/api/license/status");
+        const res = await fetchBootstrapLicenseStatus(authFetch, user);
 
         if (!res || !res.ok) {
           throw new Error(`License check failed (${res?.status})`);
