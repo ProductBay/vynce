@@ -365,15 +365,77 @@ function getTenantCallingModeState(settings) {
 
   const liveAvailable = !OFFLINE_MODE && !!vonage && !!publicWebhookUrl;
   const effective = requested === "live" && liveAvailable ? "live" : "offline";
+  let reasonCode = null;
+  let reason = null;
+
+  if (requested === "live" && !liveAvailable) {
+    if (OFFLINE_MODE) {
+      reasonCode = "OFFLINE_MODE_ENABLED";
+      reason = "Offline mode is enabled on this server.";
+    } else if (!publicWebhookUrl) {
+      reasonCode = "PUBLIC_WEBHOOK_URL_MISSING";
+      reason = "PUBLIC_WEBHOOK_URL is not configured on this server.";
+    } else if (!vonage) {
+      reasonCode = "VONAGE_CLIENT_NOT_INITIALIZED";
+      reason = "Vonage client is not initialized on this server.";
+    } else {
+      reasonCode = "LIVE_PROVIDER_UNAVAILABLE";
+      reason = "Live provider calling is not available on this server right now.";
+    }
+  }
 
   return {
     requested,
     effective,
     liveAvailable,
-    reason:
-      requested === "live" && !liveAvailable
-        ? "Live provider calling is not available on this server right now."
-        : null,
+    reasonCode,
+    reason,
+  };
+}
+
+async function getTenantCallingModeStateForTenant(tenantId, settings, telephonySettings = null) {
+  const baseState = getTenantCallingModeState(settings);
+  const requested = baseState.requested;
+  const normalizedTenantId = String(tenantId || "").trim();
+
+  let resolvedTelephonySettings = telephonySettings;
+  if (!resolvedTelephonySettings && normalizedTenantId) {
+    resolvedTelephonySettings = await TelephonySettings.findOne({ tenantId: normalizedTenantId })
+      .sort({ updatedAt: -1 })
+      .lean()
+      .catch(() => null);
+  }
+
+  const hasTenantTelephony =
+    resolvedTelephonySettings?.verification?.status === "verified" ||
+    resolvedTelephonySettings?.verified === true;
+  const liveAvailable = !OFFLINE_MODE && !!publicWebhookUrl && (!!vonage || hasTenantTelephony);
+  const effective = requested === "live" && liveAvailable ? "live" : "offline";
+  let reasonCode = null;
+  let reason = null;
+
+  if (requested === "live" && !liveAvailable) {
+    if (OFFLINE_MODE) {
+      reasonCode = "OFFLINE_MODE_ENABLED";
+      reason = "Offline mode is enabled on this server.";
+    } else if (!publicWebhookUrl) {
+      reasonCode = "PUBLIC_WEBHOOK_URL_MISSING";
+      reason = "PUBLIC_WEBHOOK_URL is not configured on this server.";
+    } else if (!vonage && !hasTenantTelephony) {
+      reasonCode = "VONAGE_CLIENT_NOT_INITIALIZED";
+      reason = "Vonage client is not initialized and this tenant has no verified telephony credentials.";
+    } else {
+      reasonCode = "LIVE_PROVIDER_UNAVAILABLE";
+      reason = "Live provider calling is not available on this server right now.";
+    }
+  }
+
+  return {
+    requested,
+    effective,
+    liveAvailable,
+    reasonCode,
+    reason,
   };
 }
 
@@ -2549,6 +2611,11 @@ async function buildTenantOperationalState({ tenantId, userId, onboarding = null
     ? "active"
     : getTenantLicenseStatus(resolvedSettings);
   const onboardingOverride = getOnboardingOverrideState(resolvedSettings);
+  const callingMode = await getTenantCallingModeStateForTenant(
+    tid,
+    resolvedSettings,
+    telephonySettings
+  );
 
   const onboardingApproved =
     onboardingOverride.active ||
@@ -2563,6 +2630,7 @@ async function buildTenantOperationalState({ tenantId, userId, onboarding = null
     tenantOperationalStatus,
     telephonyVerified,
     canGoLive: Boolean(onboardingApproved && telephonyVerified),
+    callingMode,
   };
 }
 
@@ -6113,7 +6181,9 @@ app.get(["/api/license/status", "/api/license/status-legacy"], authMiddleware, (
           onboardingOverride: accessState.operational.onboardingOverride,
         },
         effectiveAccess: accessState.effectiveAccess,
-        mode: getTenantCallingModeState(tenantSettings),
+        mode:
+          accessState?.operational?.callingMode ||
+          (await getTenantCallingModeStateForTenant(tenantId, tenantSettings)),
         onboarding: onboarding.review,
         calling,
       },
@@ -6136,7 +6206,7 @@ app.get("/api/system/mode", authMiddleware, async (req, res) => {
 
     return res.json({
       success: true,
-      data: getTenantCallingModeState(settings),
+      data: await getTenantCallingModeStateForTenant(tenantId, settings),
     });
   } catch (err) {
     return res.status(500).json({
@@ -6164,7 +6234,7 @@ app.post("/api/system/mode", authMiddleware, async (req, res) => {
         requestedMode === "live"
           ? "Live calling requested for this tenant"
           : "Offline calling enabled for this tenant",
-      data: getTenantCallingModeState(settings),
+      data: await getTenantCallingModeStateForTenant(tenantId, settings),
     });
   } catch (err) {
     return res.status(500).json({
@@ -7700,34 +7770,6 @@ app.post("/api/calls/:uuid/notes", authMiddleware, async (req, res) => {
 ========================================================= */
 
 /* =========================================================
-   BULK CONTROL
-========================================================= */
-app.get("/api/debug/calls-count", authMiddleware, adminOnly, async (req, res) => {
-  const count = await Call.countDocuments();
-  res.json({ success: true, count });
-});
-
-app.post("/api/bulk/pause", authMiddleware, adminOnly, (req, res) => {
-  bulkPaused = true;
-  io.emit("bulkPaused");
-  res.json({ success: true });
-});
-
-app.post("/api/bulk/resume", authMiddleware, adminOnly, (req, res) => {
-  bulkPaused = false;
-  io.emit("bulkResumed");
-  res.json({ success: true });
-});
-
-app.post("/api/bulk/stop", authMiddleware, adminOnly, (req, res) => {
-  bulkStopped = true;
-  bulkPaused = false;
-  bulkCallQueue = [];
-  io.emit("bulkStopped");
-  res.json({ success: true });
-});
-
-/* =========================================================
    CALLS LIST (OFFLINE + ONLINE SAFE)
 ========================================================= */
 // =======================================================
@@ -7827,20 +7869,6 @@ app.get("/api/analytics", authMiddleware, async (req, res) => {
 });
 
 /* =========================================================
-   BULK STATUS
-========================================================= */
-app.get("/api/bulk/status", authMiddleware, (req, res) => {
-  res.json({
-    success: true,
-    running: !!isBulkCallRunning,
-    paused: !!bulkPaused,
-  });
-});
-
-
-
-
-/* =========================================================
    LICENSE STATUS
 ========================================================= */
 app.get("/api/license/runtime-status", authMiddleware, (req, res) => {
@@ -7892,6 +7920,3 @@ app.get("/api/agent/license", authMiddleware, async (req, res) => {
     });
   }
 });
-
-
-
