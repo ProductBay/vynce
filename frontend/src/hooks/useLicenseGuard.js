@@ -23,13 +23,56 @@ function fetchBootstrapLicenseStatus(authFetch, user) {
   return request;
 }
 
-function getOnboardingReason(calling = {}) {
+function getOnboardingReason(payload = {}) {
+  const calling = payload?.calling || {};
+  const onboarding = payload?.onboarding || {};
+  const operational = payload?.operational || {};
+  const mode = payload?.mode || {};
+  const reviewStatus = String(
+    onboarding?.status || calling?.reviewStatus || "draft"
+  ).toLowerCase();
+  const telephonyVerified = operational?.telephonyVerified === true;
+  const onboardingApproved = operational?.onboardingApproved === true;
+  const onboardingOverrideActive = operational?.onboardingOverride?.active === true;
+
+  if (mode?.requested === "live" && mode?.effective !== "live" && mode?.reason) {
+    return mode.reason;
+  }
+
+  if (onboardingOverrideActive && !telephonyVerified) {
+    return "Admin override is active, but live calling is still blocked until telephony is verified for this tenant.";
+  }
+
+  if (!onboardingApproved) {
+    if (reviewStatus === "pending_review") {
+      return calling.testCallAvailable
+        ? "Onboarding has been submitted and is waiting for admin approval. One test call is still available, but bulk and live calling remain blocked."
+        : "Onboarding is waiting for admin approval. The tenant test call has already been used, so further calling stays blocked until approval.";
+    }
+
+    if (reviewStatus === "changes_requested") {
+      return "Admin requested onboarding changes before live calling can be enabled for this tenant.";
+    }
+
+    if (reviewStatus === "rejected") {
+      return "Tenant onboarding was rejected. Live calling stays blocked until onboarding is updated and approved.";
+    }
+
+    return calling.testCallAvailable
+      ? "Tenant onboarding is not submitted yet. One test call is available, but bulk and live calling stay blocked until onboarding is submitted and approved."
+      : "Tenant onboarding is incomplete, and the test call has already been used. Further calling stays blocked until onboarding is approved.";
+  }
+
+  if (!telephonyVerified) {
+    return "Onboarding is approved, but live calling is still blocked until telephony credentials are verified.";
+  }
+
   if (calling.requiresApproval && calling.testCallAvailable) {
-    return "Onboarding is pending approval. You can place one test call, but bulk/live calling stays locked until an admin approves the tenant.";
+    return "One test call is available, but bulk and live calling stay locked until the remaining tenant approval checks are complete.";
   }
 
   if (calling.requiresApproval && !calling.testCallAvailable) {
-    return "Onboarding is pending approval. Your test call is already used, so further calling is blocked until an admin approves the tenant.";
+    return "Calling is blocked until the remaining tenant approval checks are complete.";
   }
 
   return null;
@@ -97,6 +140,7 @@ export function useLicenseGuard() {
     license: null,
     onboarding: null,
     calling: null,
+    operational: null,
     mode: null,
     code: null,
     status: null,
@@ -115,6 +159,7 @@ export function useLicenseGuard() {
         license: null,
         onboarding: null,
         calling: null,
+        operational: null,
         mode: null,
         code: "NOT_AUTHENTICATED",
         status: 401,
@@ -151,6 +196,7 @@ export function useLicenseGuard() {
         const effectiveAccess = payload?.effectiveAccess || {};
         const calling = payload?.calling || {};
         const onboarding = payload?.onboarding || null;
+        const operational = payload?.operational || null;
         const mode = payload?.mode || null;
 
         if (commercial?.degraded) {
@@ -162,6 +208,7 @@ export function useLicenseGuard() {
             license: payload,
             onboarding,
             calling,
+            operational,
             mode,
             code: "CONTROL_PLANE_UNAVAILABLE",
             status: 503,
@@ -181,6 +228,7 @@ export function useLicenseGuard() {
             license: payload,
             onboarding,
             calling,
+            operational,
             mode,
             code: "COMMERCIAL_ACCESS_BLOCKED",
             status: 403,
@@ -197,7 +245,7 @@ export function useLicenseGuard() {
         const canBulkCall = Boolean(
           effectiveAccess?.canBulkCall ?? calling?.canBulkCall ?? true
         );
-        const reason = getOnboardingReason(calling);
+        const reason = getOnboardingReason(payload);
 
         setState({
           loading: false,
@@ -207,6 +255,7 @@ export function useLicenseGuard() {
           license: payload,
           onboarding,
           calling,
+          operational,
           mode,
           code: null,
           status: 200,
@@ -230,6 +279,7 @@ export function useLicenseGuard() {
           license: null,
           onboarding: null,
           calling: null,
+          operational: null,
           mode: null,
           code: errorCode || "LICENSE_STATUS_CHECK_FAILED",
           status: errorStatus,
