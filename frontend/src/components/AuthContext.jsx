@@ -11,7 +11,7 @@ import React, {
 import { useNavigate } from "react-router-dom";
 import apiClient from "../apiClient";
 import { io } from "socket.io-client";
-import API_BASE_URL from "../api";
+import API_BASE_URL, { resolveApiUrl } from "../api";
 
 const AuthContext = createContext(null);
 
@@ -110,7 +110,8 @@ export function AuthProvider({ children }) {
         headers['Content-Type'] = 'application/json';
       }
       
-      const res = await fetch(url, {
+      const requestUrl = resolveApiUrl(url);
+      const res = await fetch(requestUrl, {
         ...options,
         headers, // Use the headers we just prepared
         credentials: 'include',
@@ -141,7 +142,7 @@ export function AuthProvider({ children }) {
       delete retryHeaders["Content-Type"];
     }
 
-    return fetch(url, {
+    return fetch(requestUrl, {
       ...options,
       headers: retryHeaders,
       credentials: "include",
