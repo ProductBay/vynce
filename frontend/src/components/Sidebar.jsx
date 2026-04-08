@@ -6,6 +6,7 @@ import vynceLogo from "../assets/vynce-logo.png";
 
 export default function Sidebar() {
   const { user, logout } = useAuth();
+  const canManageSettings = user?.isSuperAdmin || user?.role === "admin";
 
   const plan = user?.subscription?.plan
     ? user.subscription.plan.toLowerCase()
@@ -67,10 +68,12 @@ export default function Sidebar() {
             </NavLink>
           ) : null}
 
-          <NavLink to="/settings" className="nav-link">
-            <span className="nav-icon">ST</span>
-            <span className="nav-text">Settings</span>
-          </NavLink>
+          {canManageSettings ? (
+            <NavLink to="/settings" className="nav-link">
+              <span className="nav-icon">ST</span>
+              <span className="nav-text">Settings</span>
+            </NavLink>
+          ) : null}
 
           <NavLink to="/support" className="nav-link">
             <span className="nav-icon">SP</span>
