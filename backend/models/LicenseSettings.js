@@ -36,6 +36,18 @@ const LicenseSettingsSchema = new mongoose.Schema(
       licenseId: { type: String, default: "" },
     },
 
+    onboardingOverride: {
+      enabled: { type: Boolean, default: false },
+      reason: { type: String, default: "" },
+      expiresAt: { type: Date, default: null },
+      enabledAt: { type: Date, default: null },
+      enabledBy: {
+        userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+        email: { type: String, default: "" },
+        role: { type: String, default: "" },
+      },
+    },
+
     disabledUntil: { type: Date, default: null },
   },
   { timestamps: true }
