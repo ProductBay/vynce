@@ -1,7 +1,8 @@
 import axios from "axios";
+import { resolveApiUrl } from "../api";
 
 export async function fetchLicenseStatus(token) {
-  const res = await axios.get("/api/license/status", {
+  const res = await axios.get(resolveApiUrl("/api/license/status"), {
     headers: {
       Authorization: `Bearer ${token}`
     }
