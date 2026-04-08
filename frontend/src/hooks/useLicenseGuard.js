@@ -78,6 +78,11 @@ function getOnboardingReason(payload = {}) {
   return null;
 }
 
+function shouldLogLicenseGuardError(err) {
+  const code = String(err?.code || "").trim().toUpperCase();
+  return !["NOT_AUTHENTICATED", "SESSION_EXPIRED"].includes(code) && err?.silent !== true;
+}
+
 async function buildLicenseErrorDetails(res) {
   const status = Number(res?.status || 0);
   const fallbackMessage = status
@@ -262,7 +267,9 @@ export function useLicenseGuard() {
           reason,
         });
       } catch (err) {
-        console.error("[LicenseGuard]", err);
+        if (shouldLogLicenseGuardError(err)) {
+          console.error("[LicenseGuard]", err);
+        }
         if (!mounted) return;
 
         const errorCode = String(err?.code || "").trim();
