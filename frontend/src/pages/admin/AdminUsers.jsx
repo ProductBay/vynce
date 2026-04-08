@@ -37,6 +37,8 @@ export default function AdminUsers() {
   const [detail, setDetail] = useState(null);
   const [loadingTenants, setLoadingTenants] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [overrideSaving, setOverrideSaving] = useState(false);
+  const [overrideError, setOverrideError] = useState("");
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
 
@@ -119,6 +121,45 @@ export default function AdminUsers() {
     () => tenants.find((tenant) => tenant.tenantId === selectedTenantId) || null,
     [tenants, selectedTenantId]
   );
+
+  const isOverrideActive = Boolean(detail?.onboardingOverride?.active);
+
+  const updateOnboardingOverride = async (enabled) => {
+    if (!selectedTenantId) return;
+
+    setOverrideSaving(true);
+    setOverrideError("");
+    try {
+      const body = enabled
+        ? {
+            action: "override_onboarding",
+            reasonText: "Admin override for dashboard license validation",
+            overrideMinutes: 60,
+          }
+        : {
+            action: "clear_onboarding_override",
+          };
+
+      const res = await authFetch(
+        `/api/admin/license?tenantId=${encodeURIComponent(selectedTenantId)}`,
+        {
+          method: "POST",
+          body: JSON.stringify(body),
+        }
+      );
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        throw new Error(json?.message || "Failed to update onboarding override");
+      }
+
+      await loadDetail(selectedTenantId);
+    } catch (err) {
+      setOverrideError(err.message || "Failed to update onboarding override");
+    } finally {
+      setOverrideSaving(false);
+    }
+  };
 
   const seatUsageNote = detail?.seats
     ? `${detail.seats.activeUserCount}/${Number.isFinite(detail.seats.totalSeats) ? detail.seats.totalSeats : "Unlimited"} active users`
@@ -259,14 +300,39 @@ export default function AdminUsers() {
                 >
                   Manage Access
                 </Link>
+                {isOverrideActive ? (
+                  <button
+                    type="button"
+                    className="tenant-monitoring-link tenant-monitoring-link-btn warning"
+                    disabled={overrideSaving}
+                    onClick={() => updateOnboardingOverride(false)}
+                  >
+                    {overrideSaving ? "Updating..." : "Clear Dashboard Override"}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="tenant-monitoring-link tenant-monitoring-link-btn"
+                    disabled={overrideSaving}
+                    onClick={() => updateOnboardingOverride(true)}
+                  >
+                    {overrideSaving ? "Updating..." : "Enable Dashboard Override (60m)"}
+                  </button>
+                )}
               </div>
+
+              {overrideError ? <div className="onboarding-message warning">{overrideError}</div> : null}
 
               <div className="admin-home-metrics tenant-monitoring-metrics">
                 <MonitoringMetric
                   label="Go-Live State"
-                  value={detail.onboarding?.canGoLive ? "Approved" : "Pending"}
-                  tone={detail.onboarding?.canGoLive ? "success" : "warning"}
-                  note={`Review status: ${detail.onboarding?.review?.status?.replace(/_/g, " ") || "draft"}`}
+                  value={detail.onboarding?.canGoLive || isOverrideActive ? "Approved" : "Pending"}
+                  tone={detail.onboarding?.canGoLive || isOverrideActive ? "success" : "warning"}
+                  note={
+                    isOverrideActive
+                      ? `Admin override active until ${formatDateTime(detail.onboardingOverride?.expiresAt)}`
+                      : `Review status: ${detail.onboarding?.review?.status?.replace(/_/g, " ") || "draft"}`
+                  }
                 />
                 <MonitoringMetric
                   label="Telephony"
