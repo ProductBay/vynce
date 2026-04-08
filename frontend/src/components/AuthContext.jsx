@@ -21,6 +21,14 @@ const AuthContext = createContext(null);
 const TOKEN_KEY = "vynce_token";
 const normalizeEmail = (email) => (email || "").trim().toLowerCase();
 
+function createAuthError(message, code, status = null, options = {}) {
+  const err = new Error(message);
+  err.code = code;
+  err.status = status;
+  err.silent = options.silent === true;
+  return err;
+}
+
 // -----------------------------
 // SOCKET (CONNECTS ONLY AFTER AUTH)
 // -----------------------------
@@ -94,7 +102,11 @@ export function AuthProvider({ children }) {
   // -----------------------------
   const authFetch = useCallback(
   async (url, options = {}) => {
-    if (!token) throw new Error("No active session");
+    if (!token) {
+      throw createAuthError("No active session", "NOT_AUTHENTICATED", 401, {
+        silent: true,
+      });
+    }
 
     try {
       // 1. Prepare base headers
@@ -149,13 +161,20 @@ export function AuthProvider({ children }) {
     });
   } else {
     logout();
-    throw new Error("Session expired. Please log back in.");
+    throw createAuthError(
+      "Session expired. Please log back in.",
+      "SESSION_EXPIRED",
+      401,
+      { silent: true }
+    );
   }
 }
 
         return res;
       } catch (err) {
-        console.error("Auth fetch error:", err);
+        if (!err?.silent) {
+          console.error("Auth fetch error:", err);
+        }
         throw err;
       }
     },
