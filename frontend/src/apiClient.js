@@ -1,13 +1,37 @@
 import axios from "axios";
-import { API_URL, resolveApiUrl } from "./api";
+import { API_BASE_URL, API_URL, resolveApiUrl } from "./api";
 
 const apiClient = axios.create({
-  baseURL: API_URL,
+  baseURL: API_BASE_URL || "",
   withCredentials: true,
 });
 
 apiClient.interceptors.request.use(
-  (config) => config,
+  (config) => {
+    const originalUrl = String(config.url || "").trim();
+
+    if (!originalUrl) {
+      config.url = API_URL;
+      return config;
+    }
+
+    if (/^https?:\/\//i.test(originalUrl)) {
+      return config;
+    }
+
+    if (originalUrl.startsWith("/api/")) {
+      config.url = resolveApiUrl(originalUrl);
+      return config;
+    }
+
+    if (originalUrl.startsWith("/")) {
+      config.url = resolveApiUrl(`/api${originalUrl}`);
+      return config;
+    }
+
+    config.url = resolveApiUrl(`/api/${originalUrl}`);
+    return config;
+  },
   (error) => Promise.reject(error)
 );
 
